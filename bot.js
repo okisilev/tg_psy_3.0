@@ -318,10 +318,24 @@ ${paymentLink}
             // Обновляем статус пользователя в базе данных
             await this.updateUserAccess(userId, true);
             
+            // Проверяем конфигурацию канала
+            console.log('Channel ID from config:', config.telegram.channelId);
+            console.log('Channel ID type:', typeof config.telegram.channelId);
+            
+            // Проверяем, что ID канала правильный (начинается с -10, -20 или -100)
+            if (!config.telegram.channelId.toString().startsWith('-10') && 
+                !config.telegram.channelId.toString().startsWith('-20') &&
+                !config.telegram.channelId.toString().startsWith('-100')) {
+                console.log('❌ ID канала неправильный (должен начинаться с -10, -20 или -100)');
+                console.log('Текущий ID:', config.telegram.channelId);
+                throw new Error('Invalid channel ID format');
+            }
+            
             // Пытаемся добавить пользователя в канал напрямую
             try {
+                console.log(`Attempting to add user ${userId} to channel ${config.telegram.channelId}`);
                 await this.bot.addChatMember(config.telegram.channelId, userId);
-                console.log(`User ${userId} added to channel successfully`);
+                console.log(`✅ User ${userId} added to channel successfully`);
                 
                 // Отправляем уведомление пользователю
                 await this.bot.sendMessage(userId, `
@@ -334,15 +348,20 @@ ${paymentLink}
                 `);
                 
             } catch (addError) {
-                console.log('Direct add failed, trying invite link method:', addError.message);
+                console.log('❌ Direct add failed:', addError.message);
+                console.log('Error code:', addError.response?.body?.error_code);
+                console.log('Error description:', addError.response?.body?.description);
                 
                 // Если прямое добавление не удалось, создаем invite link
                 try {
+                    console.log(`Creating invite link for channel ${config.telegram.channelId}`);
                     const inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
                         member_limit: 1,
                         expire_date: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 часа
                     });
 
+                    console.log(`✅ Invite link created: ${inviteLink.invite_link}`);
+                    
                     // Отправляем ссылку пользователю
                     await this.bot.sendMessage(userId, `
 🎉 Поздравляем! Оплата прошла успешно!
@@ -353,10 +372,12 @@ ${inviteLink.invite_link}
 ⏰ Ссылка действительна 24 часа
                     `);
                     
-                    console.log(`Invite link created for user ${userId}`);
+                    console.log(`✅ Invite link sent to user ${userId}`);
                     
                 } catch (inviteError) {
-                    console.error('Both direct add and invite link failed:', inviteError);
+                    console.error('❌ Invite link creation failed:', inviteError.message);
+                    console.error('Error code:', inviteError.response?.body?.error_code);
+                    console.error('Error description:', inviteError.response?.body?.description);
                     
                     // Отправляем сообщение с инструкциями
                     await this.bot.sendMessage(userId, `
@@ -366,6 +387,7 @@ ${inviteLink.invite_link}
 📞 Обратитесь к администратору для получения доступа.
 
 Ваш ID: ${userId}
+Проблема: ${inviteError.response?.body?.description || inviteError.message}
                     `);
                 }
             }
