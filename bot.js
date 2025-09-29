@@ -334,7 +334,13 @@ ${paymentLink}
             // Пытаемся добавить пользователя в канал напрямую
             try {
                 console.log(`Attempting to add user ${userId} to channel ${config.telegram.channelId}`);
-                await this.bot.addChatMember(config.telegram.channelId, userId);
+                await this.bot.addChatMember(config.telegram.channelId, userId, {
+                    can_send_messages: false,
+                    can_send_media_messages: false,
+                    can_send_polls: false,
+                    can_send_other_messages: false,
+                    can_add_web_page_previews: false
+                });
                 console.log(`✅ User ${userId} added to channel successfully`);
                 
                 // Отправляем уведомление пользователю
