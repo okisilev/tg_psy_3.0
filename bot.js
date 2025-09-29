@@ -310,58 +310,34 @@ ${paymentLink}
                 throw new Error('Invalid channel ID format');
             }
             
-            // Пытаемся добавить пользователя в канал напрямую
+            // Для каналов используем только invite-ссылки (прямое добавление не работает)
+            console.log(`Using invite link approach for channel ${config.telegram.channelId}`);
+            
+            // Создаем постоянную invite link
             try {
-                console.log(`Attempting to add user ${userId} to channel ${config.telegram.channelId}`);
-                
-                // Используем правильный метод addChatMember для node-telegram-bot-api
-                try {
-                    // Пробуем добавить пользователя в канал
-                    const result = await this.bot.addChatMember(config.telegram.channelId, userId);
-                    console.log(`✅ User ${userId} added to channel successfully`);
-                    console.log('Add result:', result);
-                } catch (addError) {
-                    console.log('addChatMember failed, likely due to channel restrictions');
-                    console.log('Error code:', addError.response?.body?.error_code);
-                    console.log('Error description:', addError.response?.body?.description);
-                    console.log('Full error:', addError.message);
-                    throw addError;
-                }
-                
-                // Отправляем уведомление пользователю
-                await this.bot.sendMessage(userId, `
-🎉 Поздравляем! Оплата прошла успешно!
-
-✅ Вы были добавлены в закрытый канал!
-🔗 Перейдите в канал для просмотра контента.
-
-⏰ Доступ предоставлен на 30 дней
-                `);
-                
-            } catch (addError) {
-                console.log('❌ Direct add failed:', addError.message);
-                console.log('Error code:', addError.response?.body?.error_code);
-                console.log('Error description:', addError.response?.body?.description);
-                
-                // Если прямое добавление не удалось, создаем постоянную invite link
-                try {
                     console.log(`Creating permanent invite link for channel ${config.telegram.channelId}`);
                     
-                    // Сначала пытаемся создать ссылку без ограничений
+                    // Сначала пытаемся использовать постоянную ссылку из конфигурации
                     let inviteLink;
-                    try {
-                        inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
-                            name: `Access for user ${userId}`,
-                            expire_date: 0, // Без ограничения по времени
-                            member_limit: 0, // Без ограничения по количеству участников
-                            creates_join_request: false // Прямое присоединение
-                        });
-                    } catch (createError) {
-                        console.log('Failed to create invite link with no restrictions, trying with basic settings');
-                        // Если не получается создать без ограничений, создаем с базовыми настройками
-                        inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
-                            name: `Access for user ${userId}`
-                        });
+                    if (config.telegram.permanentInviteLink) {
+                        console.log(`Using permanent invite link from config: ${config.telegram.permanentInviteLink}`);
+                        inviteLink = { invite_link: config.telegram.permanentInviteLink };
+                    } else {
+                        // Создаем новую ссылку
+                        try {
+                            inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
+                                name: `Access for user ${userId}`,
+                                expire_date: 0, // Без ограничения по времени
+                                member_limit: 0, // Без ограничения по количеству участников
+                                creates_join_request: false // Прямое присоединение
+                            });
+                        } catch (createError) {
+                            console.log('Failed to create invite link with no restrictions, trying with basic settings');
+                            // Если не получается создать без ограничений, создаем с базовыми настройками
+                            inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
+                                name: `Access for user ${userId}`
+                            });
+                        }
                     }
 
                     console.log(`✅ Permanent invite link created: ${inviteLink.invite_link}`);
@@ -750,6 +726,13 @@ ${channelLink}
                 // Предоставляем доступ к каналу
                 await this.grantChannelAccess(parseInt(telegramId));
                 
+                // Отправляем уведомление администратору
+                await this.notifyAdminAboutPayment(parseInt(telegramId), {
+                    amount: parseFloat(sum),
+                    status: payment_status,
+                    customer_email: customer_email
+                });
+                
                 console.log('Channel access granted');
             }
 
@@ -761,6 +744,48 @@ ${channelLink}
         }
     }
 
+
+    /**
+     * Отправляет уведомление администратору об успешной оплате
+     * @param {number} userId - ID пользователя
+     * @param {Object} paymentData - данные платежа
+     */
+    async notifyAdminAboutPayment(userId, paymentData) {
+        try {
+            // ID администратора (создателя канала) - 431292182
+            const adminId = 431292182;
+            
+            const user = await this.databaseService.getUser(userId);
+            const subscription = await this.databaseService.getActiveSubscription(userId);
+            
+            const message = `
+🎉 Новая успешная оплата!
+
+👤 Пользователь:
+• ID: ${userId}
+• Имя: ${user?.first_name || 'Не указано'} ${user?.last_name || ''}
+• Username: @${user?.username || 'Не указан'}
+
+💳 Платеж:
+• Сумма: ${paymentData.amount} руб.
+• Статус: ${paymentData.status}
+• Email: ${paymentData.customer_email || 'Не указан'}
+
+📅 Подписка:
+• Начало: ${new Date(subscription.start_date).toLocaleDateString('ru-RU')}
+• Окончание: ${new Date(subscription.end_date).toLocaleDateString('ru-RU')}
+• Дней: 30
+
+✅ Доступ к каналу предоставлен
+            `;
+            
+            await this.bot.sendMessage(adminId, message);
+            console.log(`✅ Admin notification sent for user ${userId}`);
+            
+        } catch (error) {
+            console.error(`❌ Failed to send admin notification:`, error.message);
+        }
+    }
 
     /**
      * Проверяет права бота в канале
