@@ -3,7 +3,8 @@ require('dotenv').config();
 module.exports = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
-    channelId: process.env.TELEGRAM_CHANNEL_ID
+    channelId: process.env.TELEGRAM_CHANNEL_ID,
+    permanentInviteLink: process.env.TELEGRAM_PERMANENT_INVITE_LINK
   },
   prodamus: {
     secretKey: process.env.PRODAMUS_SECRET_KEY,

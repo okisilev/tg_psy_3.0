@@ -373,24 +373,36 @@ ${inviteLink.invite_link}
                     console.error('Error code:', inviteError.response?.body?.error_code);
                     console.error('Error description:', inviteError.response?.body?.description);
                     
-                    // Пытаемся получить существующие invite-ссылки
+                    // Пытаемся использовать постоянную ссылку из конфигурации
                     try {
-                        console.log('Trying to get existing invite links...');
-                        const chatInviteLinks = await this.bot.getChatInviteLinks(config.telegram.channelId);
-                        if (chatInviteLinks && chatInviteLinks.length > 0) {
-                            const existingLink = chatInviteLinks[0];
-                            console.log(`Using existing invite link: ${existingLink.invite_link}`);
+                        if (config.telegram.permanentInviteLink) {
+                            console.log(`Using permanent invite link from config: ${config.telegram.permanentInviteLink}`);
                             
                             await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
+
+🔗 Ссылка для доступа к каналу:
+${config.telegram.permanentInviteLink}
+
+💡 Перейдите по ссылке для присоединения к каналу
+                            `);
+                        } else {
+                            console.log('Trying to get existing invite links...');
+                            const chatInviteLinks = await this.bot.getChatInviteLinks(config.telegram.channelId);
+                            if (chatInviteLinks && chatInviteLinks.length > 0) {
+                                const existingLink = chatInviteLinks[0];
+                                console.log(`Using existing invite link: ${existingLink.invite_link}`);
+                                
+                                await this.bot.sendMessage(userId, `
 🎉 Поздравляем! Оплата прошла успешно!
 
 🔗 Ссылка для доступа к каналу:
 ${existingLink.invite_link}
 
 💡 Перейдите по ссылке для присоединения к каналу
-                            `);
-                        } else {
-                            console.log('No existing invite links found, trying to get chat info...');
+                                `);
+                            } else {
+                                console.log('No existing invite links found, trying to get chat info...');
                             
                             // Пытаемся получить информацию о канале
                             try {
@@ -414,6 +426,7 @@ ${channelLink}
                             } catch (chatError) {
                                 console.error('Failed to get chat info:', chatError.message);
                                 throw new Error('No access method available');
+                            }
                             }
                         }
                     } catch (fallbackError) {
