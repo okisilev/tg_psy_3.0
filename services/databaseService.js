@@ -32,8 +32,12 @@ class DatabaseService {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     telegram_id INTEGER,
                     order_id TEXT UNIQUE,
+                    order_num TEXT,
                     amount REAL,
                     status TEXT,
+                    payment_status TEXT,
+                    customer_email TEXT,
+                    customer_phone TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (telegram_id) REFERENCES users (telegram_id)
                 )
@@ -141,18 +145,27 @@ class DatabaseService {
      * Сохраняет информацию о платеже
      * @param {number} telegramId - ID пользователя в Telegram
      * @param {string} orderId - ID заказа
+     * @param {string} orderNum - номер заказа
      * @param {number} amount - сумма
      * @param {string} status - статус платежа
+     * @param {string} customerEmail - email клиента
+     * @param {string} customerPhone - телефон клиента
      * @returns {Promise<number>} - ID созданной записи
      */
-    async savePayment(telegramId, orderId, amount, status) {
+    async savePayment(telegramId, orderId, orderNum, amount, status, customerEmail, customerPhone) {
         return new Promise((resolve, reject) => {
             const stmt = this.db.prepare(`
-                INSERT OR REPLACE INTO payments (telegram_id, order_id, amount, status)
-                VALUES (?, ?, ?, ?)
+                INSERT OR REPLACE INTO payments (
+                    telegram_id, order_id, order_num, amount, status, 
+                    payment_status, customer_email, customer_phone
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `);
             
-            stmt.run([telegramId, orderId, amount, status], function(err) {
+            stmt.run([
+                telegramId, orderId, orderNum, amount, status, 
+                status, customerEmail, customerPhone
+            ], function(err) {
                 if (err) {
                     reject(err);
                 } else {

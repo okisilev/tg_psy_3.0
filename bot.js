@@ -16,7 +16,6 @@ class TelegramBotApp {
         this.db = new sqlite3.Database(config.database.path);
         this.databaseService = new databaseService();
         
-        this.setupDatabase();
         this.setupExpress();
         this.setupBotHandlers();
     }
@@ -55,43 +54,6 @@ class TelegramBotApp {
         console.log('✅ Конфигурация корректна!');
     }
 
-    setupDatabase() {
-        // Создаем таблицы для хранения пользователей и платежей
-        this.db.serialize(() => {
-            // Удаляем старые таблицы если они есть
-            this.db.run(`DROP TABLE IF EXISTS payments`);
-            this.db.run(`DROP TABLE IF EXISTS users`);
-            
-            this.db.run(`
-                CREATE TABLE users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    telegram_id INTEGER UNIQUE,
-                    username TEXT,
-                    first_name TEXT,
-                    last_name TEXT,
-                    has_access BOOLEAN DEFAULT FALSE,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            `);
-
-            this.db.run(`
-                CREATE TABLE payments (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    telegram_id INTEGER,
-                    order_id TEXT UNIQUE,
-                    order_num TEXT,
-                    amount REAL,
-                    status TEXT,
-                    payment_status TEXT,
-                    customer_email TEXT,
-                    customer_phone TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (telegram_id) REFERENCES users (telegram_id)
-                )
-            `);
-        });
-    }
 
     setupExpress() {
         // Обрабатываем JSON и URL-encoded данные
@@ -672,7 +634,7 @@ ${inviteLink.invite_link}
                 console.log('Extracted telegram_id:', telegramId);
                 
                 // Сохраняем информацию о платеже
-                const paymentId = await this.savePayment(
+                const paymentId = await this.databaseService.savePayment(
                     parseInt(telegramId), 
                     order_id, 
                     order_num,
@@ -707,30 +669,6 @@ ${inviteLink.invite_link}
         }
     }
 
-    async savePayment(telegramId, orderId, orderNum, amount, status, customerEmail, customerPhone) {
-        return new Promise((resolve, reject) => {
-            const stmt = this.db.prepare(`
-                INSERT OR REPLACE INTO payments (
-                    telegram_id, order_id, order_num, amount, status, 
-                    payment_status, customer_email, customer_phone
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-            
-            stmt.run([
-                telegramId, orderId, orderNum, amount, status, 
-                status, customerEmail, customerPhone
-            ], function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(this.lastID);
-                }
-            });
-            
-            stmt.finalize();
-        });
-    }
 
     /**
      * Отправляет уведомление о скором истечении подписки
