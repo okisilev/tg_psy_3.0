@@ -39,6 +39,21 @@ class DatabaseService {
                 )
             `);
 
+            // Таблица подписок
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS subscriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_id INTEGER,
+                    payment_id INTEGER,
+                    start_date DATETIME,
+                    end_date DATETIME,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (telegram_id) REFERENCES users (telegram_id),
+                    FOREIGN KEY (payment_id) REFERENCES payments (id)
+                )
+            `);
+
             // Таблица логов
             this.db.run(`
                 CREATE TABLE IF NOT EXISTS logs (
@@ -291,6 +306,125 @@ class DatabaseService {
             
             stmt.finalize();
         });
+    }
+
+    /**
+     * Создает подписку для пользователя
+     * @param {number} telegramId - ID пользователя в Telegram
+     * @param {number} paymentId - ID платежа
+     * @param {number} durationDays - продолжительность подписки в днях
+     * @returns {Promise<number>} - ID созданной подписки
+     */
+    async createSubscription(telegramId, paymentId, durationDays = 30) {
+        return new Promise((resolve, reject) => {
+            const startDate = new Date();
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + durationDays);
+            
+            const stmt = this.db.prepare(`
+                INSERT INTO subscriptions (telegram_id, payment_id, start_date, end_date, is_active)
+                VALUES (?, ?, ?, ?, TRUE)
+            `);
+            
+            stmt.run([telegramId, paymentId, startDate.toISOString(), endDate.toISOString()], function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(this.lastID);
+                }
+            });
+            
+            stmt.finalize();
+        });
+    }
+
+    /**
+     * Получает активную подписку пользователя
+     * @param {number} telegramId - ID пользователя в Telegram
+     * @returns {Promise<Object|null>} - данные активной подписки
+     */
+    async getActiveSubscription(telegramId) {
+        return new Promise((resolve, reject) => {
+            this.db.get(`
+                SELECT * FROM subscriptions 
+                WHERE telegram_id = ? AND is_active = TRUE AND end_date > datetime('now')
+                ORDER BY end_date DESC LIMIT 1
+            `, [telegramId], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(row);
+                }
+            });
+        });
+    }
+
+    /**
+     * Проверяет, есть ли у пользователя активная подписка
+     * @param {number} telegramId - ID пользователя в Telegram
+     * @returns {Promise<boolean>} - есть ли активная подписка
+     */
+    async hasActiveSubscription(telegramId) {
+        const subscription = await this.getActiveSubscription(telegramId);
+        return subscription !== null;
+    }
+
+    /**
+     * Получает подписки, истекающие через указанное количество дней
+     * @param {number} days - количество дней до истечения
+     * @returns {Promise<Array>} - список подписок
+     */
+    async getExpiringSubscriptions(days) {
+        return new Promise((resolve, reject) => {
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + days);
+            
+            this.db.all(`
+                SELECT s.*, u.first_name, u.username 
+                FROM subscriptions s
+                JOIN users u ON s.telegram_id = u.telegram_id
+                WHERE s.is_active = TRUE 
+                AND DATE(s.end_date) = DATE(?)
+                ORDER BY s.end_date ASC
+            `, [targetDate.toISOString().split('T')[0]], (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    /**
+     * Деактивирует истекшие подписки
+     * @returns {Promise<number>} - количество деактивированных подписок
+     */
+    async deactivateExpiredSubscriptions() {
+        return new Promise((resolve, reject) => {
+            this.db.run(`
+                UPDATE subscriptions 
+                SET is_active = FALSE 
+                WHERE is_active = TRUE AND end_date <= datetime('now')
+            `, function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(this.changes);
+                }
+            });
+        });
+    }
+
+    /**
+     * Обновляет статус доступа пользователя на основе подписки
+     * @param {number} telegramId - ID пользователя в Telegram
+     * @returns {Promise<boolean>} - обновлен ли статус
+     */
+    async updateUserAccessFromSubscription(telegramId) {
+        const hasActiveSubscription = await this.hasActiveSubscription(telegramId);
+        await this.updateUserAccess(telegramId, hasActiveSubscription);
+        return hasActiveSubscription;
     }
 
     /**

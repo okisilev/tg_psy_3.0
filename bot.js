@@ -315,6 +315,15 @@ ${paymentLink}
 
     async grantChannelAccess(userId) {
         try {
+            // Проверяем активную подписку
+            const hasActiveSubscription = await this.databaseService.hasActiveSubscription(userId);
+            if (!hasActiveSubscription) {
+                console.log(`❌ User ${userId} has no active subscription`);
+                return false;
+            }
+            
+            console.log(`✅ User ${userId} has active subscription`);
+            
             // Обновляем статус пользователя в базе данных
             await this.updateUserAccess(userId, true);
             
@@ -662,7 +671,7 @@ ${inviteLink.invite_link}
                 console.log('Extracted telegram_id:', telegramId);
                 
                 // Сохраняем информацию о платеже
-                await this.savePayment(
+                const paymentId = await this.savePayment(
                     parseInt(telegramId), 
                     order_id, 
                     order_num,
@@ -673,6 +682,15 @@ ${inviteLink.invite_link}
                 );
                 
                 console.log('Payment saved successfully');
+                
+                // Создаем подписку на 30 дней
+                await this.databaseService.createSubscription(
+                    parseInt(telegramId), 
+                    paymentId, 
+                    30
+                );
+                
+                console.log('Subscription created for 30 days');
                 
                 // Предоставляем доступ к каналу
                 await this.grantChannelAccess(parseInt(telegramId));
@@ -712,10 +730,126 @@ ${inviteLink.invite_link}
             stmt.finalize();
         });
     }
+
+    /**
+     * Отправляет уведомление о скором истечении подписки
+     * @param {number} userId - ID пользователя
+     * @param {Object} subscription - данные подписки
+     */
+    async sendSubscriptionExpiryNotification(userId, subscription) {
+        try {
+            const endDate = new Date(subscription.end_date);
+            const daysLeft = Math.ceil((endDate - new Date()) / (1000 * 60 * 60 * 24));
+            
+            const keyboard = {
+                inline_keyboard: [[
+                    {
+                        text: '🔄 Продлить подписку',
+                        callback_data: 'renew_subscription'
+                    }
+                ]]
+            };
+
+            await this.bot.sendMessage(userId, `
+⚠️ Внимание! Ваша подписка истекает через ${daysLeft} дней
+
+📅 Дата окончания: ${endDate.toLocaleDateString('ru-RU')}
+
+🔗 Для продления подписки нажмите кнопку ниже или перейдите по ссылке:
+${config.prodamus.linkToForm}
+
+⏰ Не упустите возможность продолжить доступ к эксклюзивному контенту!
+            `, {
+                reply_markup: keyboard
+            });
+
+            console.log(`✅ Expiry notification sent to user ${userId}`);
+        } catch (error) {
+            console.error(`❌ Failed to send expiry notification to user ${userId}:`, error.message);
+        }
+    }
+
+    /**
+     * Проверяет и отправляет уведомления о скором истечении подписок
+     */
+    async checkExpiringSubscriptions() {
+        try {
+            console.log('Checking expiring subscriptions...');
+            
+            // Получаем подписки, истекающие через 3 дня
+            const expiringSubscriptions = await this.databaseService.getExpiringSubscriptions(3);
+            
+            console.log(`Found ${expiringSubscriptions.length} subscriptions expiring in 3 days`);
+            
+            for (const subscription of expiringSubscriptions) {
+                await this.sendSubscriptionExpiryNotification(
+                    subscription.telegram_id, 
+                    subscription
+                );
+            }
+            
+            // Деактивируем истекшие подписки
+            const deactivatedCount = await this.databaseService.deactivateExpiredSubscriptions();
+            if (deactivatedCount > 0) {
+                console.log(`Deactivated ${deactivatedCount} expired subscriptions`);
+            }
+            
+        } catch (error) {
+            console.error('Error checking expiring subscriptions:', error);
+        }
+    }
+
+    /**
+     * Запускает периодическую проверку подписок
+     */
+    startSubscriptionChecker() {
+        // Проверяем каждые 6 часов
+        setInterval(async () => {
+            await this.checkExpiringSubscriptions();
+        }, 6 * 60 * 60 * 1000);
+        
+        // Первая проверка через 1 минуту после запуска
+        setTimeout(async () => {
+            await this.checkExpiringSubscriptions();
+        }, 60 * 1000);
+        
+        console.log('✅ Subscription checker started');
+    }
 }
 
 // Запуск бота
 const botApp = new TelegramBotApp();
+
+// Обработчик callback-кнопок
+botApp.bot.on('callback_query', async (callbackQuery) => {
+    try {
+        const data = callbackQuery.data;
+        const userId = callbackQuery.from.id;
+        
+        if (data === 'renew_subscription') {
+            await botApp.bot.sendMessage(userId, `
+🔄 Продление подписки
+
+Для продления подписки перейдите по ссылке:
+${config.prodamus.linkToForm}
+
+💳 После оплаты доступ будет автоматически продлен на 30 дней.
+            `);
+            
+            await botApp.bot.answerCallbackQuery(callbackQuery.id, {
+                text: 'Ссылка для продления отправлена!'
+            });
+        }
+    } catch (error) {
+        console.error('Error handling callback query:', error);
+        await botApp.bot.answerCallbackQuery(callbackQuery.id, {
+            text: 'Произошла ошибка. Попробуйте позже.'
+        });
+    }
+});
+
+// Запуск проверки подписок
+botApp.startSubscriptionChecker();
 
 // Обработка ошибок
 process.on('unhandledRejection', (reason, promise) => {
