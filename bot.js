@@ -287,6 +287,13 @@ ${paymentLink}
             
             console.log(`✅ User ${userId} has active subscription`);
             
+            // Проверяем права бота в канале
+            const hasRights = await this.checkBotRights();
+            if (!hasRights) {
+                console.log('❌ Bot does not have admin rights, using invite link approach');
+                throw new Error('Bot does not have admin rights');
+            }
+            
             // Обновляем статус пользователя в базе данных
             await this.updateUserAccess(userId, true);
             
@@ -307,14 +314,18 @@ ${paymentLink}
             try {
                 console.log(`Attempting to add user ${userId} to channel ${config.telegram.channelId}`);
                 
-                // Проверяем, есть ли метод addChatMember
-                if (typeof this.bot.addChatMember === 'function') {
-                    await this.bot.addChatMember(config.telegram.channelId, userId);
+                // Используем правильный метод addChatMember для node-telegram-bot-api
+                try {
+                    // Пробуем добавить пользователя в канал
+                    const result = await this.bot.addChatMember(config.telegram.channelId, userId);
                     console.log(`✅ User ${userId} added to channel successfully`);
-                } else {
-                    // Если метода нет, используем альтернативный подход
-                    console.log('addChatMember method not available, using invite link approach');
-                    throw new Error('addChatMember method not available');
+                    console.log('Add result:', result);
+                } catch (addError) {
+                    console.log('addChatMember failed, likely due to channel restrictions');
+                    console.log('Error code:', addError.response?.body?.error_code);
+                    console.log('Error description:', addError.response?.body?.description);
+                    console.log('Full error:', addError.message);
+                    throw addError;
                 }
                 
                 // Отправляем уведомление пользователю
@@ -750,6 +761,42 @@ ${channelLink}
         }
     }
 
+
+    /**
+     * Проверяет права бота в канале
+     * @returns {Promise<boolean>} - есть ли права администратора
+     */
+    async checkBotRights() {
+        try {
+            console.log(`Checking bot rights for channel ${config.telegram.channelId}`);
+            
+            // Получаем информацию о канале
+            const chatInfo = await this.bot.getChat(config.telegram.channelId);
+            console.log('Chat info:', chatInfo);
+            
+            // Получаем информацию об администраторах
+            const administrators = await this.bot.getChatAdministrators(config.telegram.channelId);
+            console.log('Administrators:', administrators);
+            
+            // Проверяем, есть ли бот среди администраторов
+            const botInfo = await this.bot.getMe();
+            console.log('Bot info:', botInfo);
+            
+            const botAdmin = administrators.find(admin => admin.user.id === botInfo.id);
+            if (botAdmin) {
+                console.log('✅ Bot is administrator');
+                console.log('Bot admin rights:', botAdmin);
+                return true;
+            } else {
+                console.log('❌ Bot is not administrator');
+                return false;
+            }
+            
+        } catch (error) {
+            console.error('❌ Failed to check bot rights:', error.message);
+            return false;
+        }
+    }
 
     /**
      * Создает постоянную invite-ссылку для канала
