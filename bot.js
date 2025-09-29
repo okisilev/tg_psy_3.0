@@ -318,24 +318,61 @@ ${paymentLink}
             // Обновляем статус пользователя в базе данных
             await this.updateUserAccess(userId, true);
             
-            // Приглашаем пользователя в канал
-            const inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
-                member_limit: 1,
-                expire_date: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 дней
-            });
-
-            const message = `
+            // Пытаемся добавить пользователя в канал напрямую
+            try {
+                await this.bot.addChatMember(config.telegram.channelId, userId);
+                console.log(`User ${userId} added to channel successfully`);
+                
+                // Отправляем уведомление пользователю
+                await this.bot.sendMessage(userId, `
 🎉 Поздравляем! Оплата прошла успешно!
 
-🔗 Ссылка для входа в канал:
+✅ Вы были добавлены в закрытый канал!
+🔗 Перейдите в канал для просмотра контента.
+
+⏰ Доступ предоставлен навсегда
+                `);
+                
+            } catch (addError) {
+                console.log('Direct add failed, trying invite link method:', addError.message);
+                
+                // Если прямое добавление не удалось, создаем invite link
+                try {
+                    const inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
+                        member_limit: 1,
+                        expire_date: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 часа
+                    });
+
+                    // Отправляем ссылку пользователю
+                    await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
+
+🔗 Ссылка для доступа к каналу:
 ${inviteLink.invite_link}
 
-⏰ Ссылка действительна 7 дней.
-            `;
+⏰ Ссылка действительна 24 часа
+                    `);
+                    
+                    console.log(`Invite link created for user ${userId}`);
+                    
+                } catch (inviteError) {
+                    console.error('Both direct add and invite link failed:', inviteError);
+                    
+                    // Отправляем сообщение с инструкциями
+                    await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
 
-            this.bot.sendMessage(userId, message);
+❌ Автоматическое добавление в канал не удалось.
+📞 Обратитесь к администратору для получения доступа.
 
-                } catch (error) {
+Ваш ID: ${userId}
+                    `);
+                }
+            }
+
+            console.log(`Channel access granted to user ${userId}`);
+
+        } catch (error) {
             console.error('Error granting channel access:', error);
             this.bot.sendMessage(userId, '❌ Ошибка при предоставлении доступа. Обратитесь к администратору.');
         }
@@ -357,6 +394,41 @@ ${inviteLink.invite_link}
         });
     }
 
+    async revokeChannelAccess(userId) {
+        try {
+            // Обновляем статус пользователя в базе данных
+            await this.updateUserAccess(userId, false);
+            
+            // Пытаемся удалить пользователя из канала
+            try {
+                await this.bot.banChatMember(config.telegram.channelId, userId);
+                console.log(`User ${userId} removed from channel successfully`);
+                
+                // Отправляем уведомление пользователю
+                await this.bot.sendMessage(userId, `
+❌ Ваш доступ к каналу был отозван.
+
+📞 Обратитесь к администратору для восстановления доступа.
+                `);
+                
+            } catch (banError) {
+                console.log('Failed to remove user from channel:', banError.message);
+                
+                // Отправляем уведомление пользователю
+                await this.bot.sendMessage(userId, `
+❌ Ваш доступ к каналу был отозван.
+
+📞 Обратитесь к администратору для восстановления доступа.
+                `);
+            }
+
+            console.log(`Channel access revoked for user ${userId}`);
+
+        } catch (error) {
+            console.error('Error revoking channel access:', error);
+        }
+    }
+
     async checkUserAccess(chatId, userId) {
         try {
             const user = await this.getUser(userId);
@@ -369,6 +441,125 @@ ${inviteLink.invite_link}
         } catch (error) {
             console.error('Error checking user access:', error);
         }
+    }
+
+    isAdmin(userId) {
+        // Добавьте ID администраторов в конфигурацию
+        const adminIds = [431292182]; // Замените на реальные ID администраторов
+        return adminIds.includes(userId);
+    }
+
+    async handleAdminCommand(chatId, userId, command) {
+        if (!this.isAdmin(userId)) {
+            this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
+            return;
+        }
+
+        try {
+            switch (command) {
+                case 'admin_add_user':
+                    this.bot.sendMessage(chatId, 'Введите ID пользователя для добавления в канал:');
+                    break;
+                case 'admin_remove_user':
+                    this.bot.sendMessage(chatId, 'Введите ID пользователя для удаления из канала:');
+                    break;
+                case 'admin_list_users':
+                    await this.listChannelUsers(chatId);
+                    break;
+                case 'admin_stats':
+                    await this.showStats(chatId);
+                    break;
+            }
+        } catch (error) {
+            console.error('Error handling admin command:', error);
+            this.bot.sendMessage(chatId, '❌ Ошибка выполнения команды администратора.');
+        }
+    }
+
+    async listChannelUsers(chatId) {
+        try {
+            const users = await this.getAllUsers();
+            let message = '📊 Список пользователей с доступом:\n\n';
+            
+            users.forEach(user => {
+                if (user.has_access) {
+                    message += `👤 ID: ${user.telegram_id}\n`;
+                    message += `📧 Username: @${user.username || 'не указан'}\n`;
+                    message += `📅 Дата: ${user.created_at}\n\n`;
+                }
+            });
+            
+            this.bot.sendMessage(chatId, message);
+        } catch (error) {
+            console.error('Error listing users:', error);
+            this.bot.sendMessage(chatId, '❌ Ошибка получения списка пользователей.');
+        }
+    }
+
+    async showStats(chatId) {
+        try {
+            const stats = await this.getStats();
+            const message = `
+📊 Статистика бота:
+
+👥 Всего пользователей: ${stats.totalUsers}
+✅ С доступом: ${stats.usersWithAccess}
+❌ Без доступа: ${stats.usersWithoutAccess}
+💰 Всего платежей: ${stats.totalPayments}
+✅ Успешных: ${stats.successfulPayments}
+            `;
+            
+            this.bot.sendMessage(chatId, message);
+        } catch (error) {
+            console.error('Error showing stats:', error);
+            this.bot.sendMessage(chatId, '❌ Ошибка получения статистики.');
+        }
+    }
+
+    async getAllUsers() {
+        return new Promise((resolve, reject) => {
+            this.db.all('SELECT * FROM users ORDER BY created_at DESC', (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    async getStats() {
+        return new Promise((resolve, reject) => {
+            this.db.get(`
+                SELECT 
+                    COUNT(*) as totalUsers,
+                    SUM(CASE WHEN has_access = 1 THEN 1 ELSE 0 END) as usersWithAccess,
+                    SUM(CASE WHEN has_access = 0 THEN 1 ELSE 0 END) as usersWithoutAccess
+                FROM users
+            `, (err, userStats) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                
+                this.db.get(`
+                    SELECT 
+                        COUNT(*) as totalPayments,
+                        SUM(CASE WHEN payment_status = 'success' THEN 1 ELSE 0 END) as successfulPayments
+                    FROM payments
+                `, (err, paymentStats) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    
+                    resolve({
+                        ...userStats,
+                        ...paymentStats
+                    });
+                });
+            });
+        });
     }
 
     async getUser(userId) {
