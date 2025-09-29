@@ -313,47 +313,170 @@ ${paymentLink}
             // Для каналов используем только invite-ссылки (прямое добавление не работает)
             console.log(`Using invite link approach for channel ${config.telegram.channelId}`);
             
-            let inviteLink;
-            if (config.telegram.permanentInviteLink) {
-                console.log(`Using permanent invite link from config: ${config.telegram.permanentInviteLink}`);
-                inviteLink = config.telegram.permanentInviteLink;
-            } else {
-                try {
-                    console.log(`Creating new invite link for channel ${config.telegram.channelId}`);
-                    const linkResult = await this.bot.createChatInviteLink(config.telegram.channelId, {
-                        name: `Access for user ${userId}`,
-                        expire_date: 0, // Без ограничения по времени
-                        member_limit: 0, // Без ограничения по количеству участников
-                        creates_join_request: false // Прямое присоединение
-                    });
-                    inviteLink = linkResult.invite_link;
-                    console.log(`✅ New invite link created: ${inviteLink}`);
-                } catch (createError) {
-                    console.log('Failed to create invite link with no restrictions, trying with basic settings');
-                    try {
-                        const linkResult = await this.bot.createChatInviteLink(config.telegram.channelId, {
-                            name: `Access for user ${userId}`
-                        });
-                        inviteLink = linkResult.invite_link;
-                        console.log(`✅ Basic invite link created: ${inviteLink}`);
-                    } catch (basicError) {
-                        console.error('❌ Failed to create any invite link:', basicError.message);
-                        throw new Error('Cannot create invite link');
+            // Создаем постоянную invite link
+            try {
+                    console.log(`Creating permanent invite link for channel ${config.telegram.channelId}`);
+                    
+                    // Сначала пытаемся использовать постоянную ссылку из конфигурации
+                    let inviteLink;
+                    if (config.telegram.permanentInviteLink) {
+                        console.log(`Using permanent invite link from config: ${config.telegram.permanentInviteLink}`);
+                        inviteLink = { invite_link: config.telegram.permanentInviteLink };
+                    } else {
+                        // Создаем новую ссылку
+                        try {
+                            inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
+                                name: `Access for user ${userId}`,
+                                expire_date: 0, // Без ограничения по времени
+                                member_limit: 0, // Без ограничения по количеству участников
+                                creates_join_request: false // Прямое присоединение
+                            });
+                        } catch (createError) {
+                            console.log('Failed to create invite link with no restrictions, trying with basic settings');
+                            // Если не получается создать без ограничений, создаем с базовыми настройками
+                            inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
+                                name: `Access for user ${userId}`
+                            });
+                        }
                     }
-                }
-            }
 
-            // Отправляем ссылку пользователю
-            await this.bot.sendMessage(userId, `
+                    console.log(`✅ Permanent invite link created: ${inviteLink.invite_link}`);
+                    
+                    // Отправляем ссылку пользователю
+                    await this.bot.sendMessage(userId, `
 🎉 Поздравляем! Оплата прошла успешно!
 
 🔗 Ссылка для доступа к каналу:
-${inviteLink}
+${inviteLink.invite_link}
+
+⏰ Ссылка действительна постоянно
+💡 Перейдите по ссылке для присоединения к каналу
+                    `);
+                    
+                    console.log(`✅ Permanent invite link sent to user ${userId}`);
+                    
+                } catch (inviteError) {
+                    console.error('❌ Invite link creation failed:', inviteError.message);
+                    console.error('Error code:', inviteError.response?.body?.error_code);
+                    console.error('Error description:', inviteError.response?.body?.description);
+                    
+                    // Пытаемся использовать постоянную ссылку из конфигурации
+                    try {
+                        if (config.telegram.permanentInviteLink) {
+                            console.log(`Using permanent invite link from config: ${config.telegram.permanentInviteLink}`);
+                            
+                            await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
+
+🔗 Ссылка для доступа к каналу:
+${config.telegram.permanentInviteLink}
 
 💡 Перейдите по ссылке для присоединения к каналу
-            `);
-            
-            console.log(`✅ Invite link sent to user ${userId}`);
+                            `);
+                        } else {
+                            console.log('Trying to get existing invite links...');
+                            const chatInviteLinks = await this.bot.getChatInviteLinks(config.telegram.channelId);
+                            if (chatInviteLinks && chatInviteLinks.length > 0) {
+                                const existingLink = chatInviteLinks[0];
+                                console.log(`Using existing invite link: ${existingLink.invite_link}`);
+                                
+                                await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
+
+🔗 Ссылка для доступа к каналу:
+${existingLink.invite_link}
+
+💡 Перейдите по ссылке для присоединения к каналу
+                                `);
+                            } else {
+                                console.log('No existing invite links found, trying to get chat info...');
+                            
+                            // Пытаемся получить информацию о канале
+                            try {
+                                const chatInfo = await this.bot.getChat(config.telegram.channelId);
+                                console.log('Chat info:', chatInfo);
+                                
+                                // Если канал публичный, отправляем ссылку на канал
+                                if (chatInfo.username) {
+                                    const channelLink = `https://t.me/${chatInfo.username}`;
+                                    await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
+
+🔗 Ссылка для доступа к каналу:
+${channelLink}
+
+💡 Перейдите по ссылке для присоединения к каналу
+                                    `);
+                                } else {
+                                    throw new Error('Channel is private and no invite links available');
+                                }
+                            } catch (chatError) {
+                                console.error('Failed to get chat info:', chatError.message);
+                                throw new Error('No access method available');
+                            }
+                            }
+                        }
+                    } catch (fallbackError) {
+                        console.error('❌ Fallback failed:', fallbackError.message);
+                        
+                        // Отправляем сообщение с инструкциями
+                        await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
+
+❌ Автоматическое добавление в канал не удалось.
+📞 Обратитесь к администратору для получения доступа.
+
+Ваш ID: ${userId}
+Проблема: ${inviteError.response?.body?.description || inviteError.message}
+
+💡 Возможные причины:
+• Бот не является администратором канала
+• У бота нет прав на создание invite-ссылок
+• Канал имеет ограничения на присоединение
+                        `);
+                    }
+                }
+            } catch (inviteError) {
+                console.error('❌ Invite link creation failed:', inviteError.message);
+                console.error('Error code:', inviteError.response?.body?.error_code);
+                console.error('Error description:', inviteError.response?.body?.description);
+                
+                // Пытаемся использовать постоянную ссылку из конфигурации
+                try {
+                    if (config.telegram.permanentInviteLink) {
+                        console.log(`Using permanent invite link from config: ${config.telegram.permanentInviteLink}`);
+                        
+                        await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
+
+🔗 Ссылка для доступа к каналу:
+${config.telegram.permanentInviteLink}
+
+💡 Перейдите по ссылке для присоединения к каналу
+                        `);
+                    } else {
+                        throw new Error('No permanent invite link configured');
+                    }
+                } catch (fallbackError) {
+                    console.error('❌ Fallback failed:', fallbackError.message);
+                    
+                    // Отправляем сообщение с инструкциями
+                    await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
+
+❌ Автоматическое добавление в канал не удалось.
+📞 Обратитесь к администратору для получения доступа.
+
+Ваш ID: ${userId}
+Проблема: ${inviteError.response?.body?.description || inviteError.message}
+
+💡 Возможные причины:
+• Бот не является администратором канала
+• У бота нет прав на создание invite-ссылок
+• Канал имеет ограничения на присоединение
+                    `);
+                }
+            }
 
             console.log(`Channel access granted to user ${userId}`);
 
