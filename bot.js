@@ -14,6 +14,7 @@ class TelegramBotApp {
         this.bot = new TelegramBot(config.telegram.botToken, { polling: true });
         this.app = express();
         this.db = new sqlite3.Database(config.database.path);
+        this.databaseService = new databaseService();
         
         this.setupDatabase();
         this.setupExpress();
