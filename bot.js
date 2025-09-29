@@ -671,6 +671,45 @@ ${inviteLink.invite_link}
 
 
     /**
+     * Удаляет пользователя из канала
+     * @param {number} userId - ID пользователя
+     * @returns {Promise<boolean>} - успешно ли удален
+     */
+    async kickUserFromChannel(userId) {
+        try {
+            console.log(`Attempting to kick user ${userId} from channel ${config.telegram.channelId}`);
+            
+            // Пытаемся удалить пользователя из канала
+            await this.bot.banChatMember(config.telegram.channelId, userId);
+            console.log(`✅ User ${userId} kicked from channel successfully`);
+            
+            // Обновляем статус доступа в базе данных
+            await this.databaseService.updateUserAccess(userId, false);
+            
+            // Отправляем уведомление пользователю
+            await this.bot.sendMessage(userId, `
+❌ Ваша подписка истекла
+
+📅 Доступ к закрытому каналу был приостановлен.
+
+🔄 Для восстановления доступа продлите подписку:
+${config.prodamus.linkToForm}
+
+💳 После оплаты доступ будет автоматически восстановлен.
+            `);
+            
+            console.log(`✅ Expiry notification sent to user ${userId}`);
+            return true;
+            
+        } catch (error) {
+            console.error(`❌ Failed to kick user ${userId} from channel:`, error.message);
+            console.error('Error code:', error.response?.body?.error_code);
+            console.error('Error description:', error.response?.body?.description);
+            return false;
+        }
+    }
+
+    /**
      * Отправляет уведомление о скором истечении подписки
      * @param {number} userId - ID пользователя
      * @param {Object} subscription - данные подписки
@@ -725,6 +764,16 @@ ${config.prodamus.linkToForm}
                     subscription.telegram_id, 
                     subscription
                 );
+            }
+            
+            // Получаем истекшие подписки для удаления пользователей
+            const expiredSubscriptions = await this.databaseService.getExpiredSubscriptions();
+            console.log(`Found ${expiredSubscriptions.length} expired subscriptions`);
+            
+            // Удаляем пользователей с истекшими подписками из канала
+            for (const subscription of expiredSubscriptions) {
+                console.log(`Processing expired subscription for user ${subscription.telegram_id}`);
+                await this.kickUserFromChannel(subscription.telegram_id);
             }
             
             // Деактивируем истекшие подписки

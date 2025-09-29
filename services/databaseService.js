@@ -410,6 +410,29 @@ class DatabaseService {
     }
 
     /**
+     * Получает истекшие подписки (для удаления пользователей из канала)
+     * @returns {Promise<Array>} - список истекших подписок
+     */
+    async getExpiredSubscriptions() {
+        return new Promise((resolve, reject) => {
+            this.db.all(`
+                SELECT s.*, u.first_name, u.username 
+                FROM subscriptions s
+                JOIN users u ON s.telegram_id = u.telegram_id
+                WHERE s.is_active = TRUE 
+                AND s.end_date <= datetime('now')
+                ORDER BY s.end_date ASC
+            `, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    /**
      * Деактивирует истекшие подписки
      * @returns {Promise<number>} - количество деактивированных подписок
      */
