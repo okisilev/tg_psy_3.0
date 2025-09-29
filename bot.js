@@ -322,7 +322,7 @@ ${paymentLink}
 ✅ Вы были добавлены в закрытый канал!
 🔗 Перейдите в канал для просмотра контента.
 
-⏰ Доступ предоставлен навсегда
+⏰ Доступ предоставлен на 30 дней
                 `);
                 
             } catch (addError) {
@@ -330,15 +330,17 @@ ${paymentLink}
                 console.log('Error code:', addError.response?.body?.error_code);
                 console.log('Error description:', addError.response?.body?.description);
                 
-                // Если прямое добавление не удалось, создаем invite link
+                // Если прямое добавление не удалось, создаем постоянную invite link
                 try {
-                    console.log(`Creating invite link for channel ${config.telegram.channelId}`);
+                    console.log(`Creating permanent invite link for channel ${config.telegram.channelId}`);
                     const inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
-                        member_limit: 1,
-                        expire_date: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 часа
+                        name: `Access for user ${userId}`,
+                        expire_date: 0, // Без ограничения по времени
+                        member_limit: 0, // Без ограничения по количеству участников
+                        creates_join_request: false // Прямое присоединение
                     });
 
-                    console.log(`✅ Invite link created: ${inviteLink.invite_link}`);
+                    console.log(`✅ Permanent invite link created: ${inviteLink.invite_link}`);
                     
                     // Отправляем ссылку пользователю
                     await this.bot.sendMessage(userId, `
@@ -347,18 +349,40 @@ ${paymentLink}
 🔗 Ссылка для доступа к каналу:
 ${inviteLink.invite_link}
 
-⏰ Ссылка действительна 24 часа
+⏰ Ссылка действительна постоянно
+💡 Перейдите по ссылке для присоединения к каналу
                     `);
                     
-                    console.log(`✅ Invite link sent to user ${userId}`);
+                    console.log(`✅ Permanent invite link sent to user ${userId}`);
                     
                 } catch (inviteError) {
                     console.error('❌ Invite link creation failed:', inviteError.message);
                     console.error('Error code:', inviteError.response?.body?.error_code);
                     console.error('Error description:', inviteError.response?.body?.description);
                     
-                    // Отправляем сообщение с инструкциями
-                    await this.bot.sendMessage(userId, `
+                    // Пытаемся получить существующие invite-ссылки
+                    try {
+                        const chatInviteLinks = await this.bot.getChatInviteLinks(config.telegram.channelId);
+                        if (chatInviteLinks && chatInviteLinks.length > 0) {
+                            const existingLink = chatInviteLinks[0];
+                            console.log(`Using existing invite link: ${existingLink.invite_link}`);
+                            
+                            await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
+
+🔗 Ссылка для доступа к каналу:
+${existingLink.invite_link}
+
+💡 Перейдите по ссылке для присоединения к каналу
+                            `);
+                        } else {
+                            throw new Error('No existing invite links found');
+                        }
+                    } catch (fallbackError) {
+                        console.error('❌ Fallback failed:', fallbackError.message);
+                        
+                        // Отправляем сообщение с инструкциями
+                        await this.bot.sendMessage(userId, `
 🎉 Поздравляем! Оплата прошла успешно!
 
 ❌ Автоматическое добавление в канал не удалось.
@@ -366,7 +390,8 @@ ${inviteLink.invite_link}
 
 Ваш ID: ${userId}
 Проблема: ${inviteError.response?.body?.description || inviteError.message}
-                    `);
+                        `);
+                    }
                 }
             }
 
@@ -669,6 +694,32 @@ ${inviteLink.invite_link}
         }
     }
 
+
+    /**
+     * Создает постоянную invite-ссылку для канала
+     * @returns {Promise<string|null>} - постоянная invite-ссылка
+     */
+    async createPermanentInviteLink() {
+        try {
+            console.log(`Creating permanent invite link for channel ${config.telegram.channelId}`);
+            
+            const inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
+                name: 'Permanent Access Link',
+                expire_date: 0, // Без ограничения по времени
+                member_limit: 0, // Без ограничения по количеству участников
+                creates_join_request: false // Прямое присоединение
+            });
+
+            console.log(`✅ Permanent invite link created: ${inviteLink.invite_link}`);
+            return inviteLink.invite_link;
+            
+        } catch (error) {
+            console.error('❌ Failed to create permanent invite link:', error.message);
+            console.error('Error code:', error.response?.body?.error_code);
+            console.error('Error description:', error.response?.body?.description);
+            return null;
+        }
+    }
 
     /**
      * Удаляет пользователя из канала
