@@ -306,14 +306,16 @@ ${paymentLink}
             // Пытаемся добавить пользователя в канал напрямую
             try {
                 console.log(`Attempting to add user ${userId} to channel ${config.telegram.channelId}`);
-                await this.bot.addChatMember(config.telegram.channelId, userId, {
-                    can_send_messages: false,
-                    can_send_media_messages: false,
-                    can_send_polls: false,
-                    can_send_other_messages: false,
-                    can_add_web_page_previews: false
-                });
-                console.log(`✅ User ${userId} added to channel successfully`);
+                
+                // Проверяем, есть ли метод addChatMember
+                if (typeof this.bot.addChatMember === 'function') {
+                    await this.bot.addChatMember(config.telegram.channelId, userId);
+                    console.log(`✅ User ${userId} added to channel successfully`);
+                } else {
+                    // Если метода нет, используем альтернативный подход
+                    console.log('addChatMember method not available, using invite link approach');
+                    throw new Error('addChatMember method not available');
+                }
                 
                 // Отправляем уведомление пользователю
                 await this.bot.sendMessage(userId, `
@@ -333,12 +335,23 @@ ${paymentLink}
                 // Если прямое добавление не удалось, создаем постоянную invite link
                 try {
                     console.log(`Creating permanent invite link for channel ${config.telegram.channelId}`);
-                    const inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
-                        name: `Access for user ${userId}`,
-                        expire_date: 0, // Без ограничения по времени
-                        member_limit: 0, // Без ограничения по количеству участников
-                        creates_join_request: false // Прямое присоединение
-                    });
+                    
+                    // Сначала пытаемся создать ссылку без ограничений
+                    let inviteLink;
+                    try {
+                        inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
+                            name: `Access for user ${userId}`,
+                            expire_date: 0, // Без ограничения по времени
+                            member_limit: 0, // Без ограничения по количеству участников
+                            creates_join_request: false // Прямое присоединение
+                        });
+                    } catch (createError) {
+                        console.log('Failed to create invite link with no restrictions, trying with basic settings');
+                        // Если не получается создать без ограничений, создаем с базовыми настройками
+                        inviteLink = await this.bot.createChatInviteLink(config.telegram.channelId, {
+                            name: `Access for user ${userId}`
+                        });
+                    }
 
                     console.log(`✅ Permanent invite link created: ${inviteLink.invite_link}`);
                     
@@ -362,6 +375,7 @@ ${inviteLink.invite_link}
                     
                     // Пытаемся получить существующие invite-ссылки
                     try {
+                        console.log('Trying to get existing invite links...');
                         const chatInviteLinks = await this.bot.getChatInviteLinks(config.telegram.channelId);
                         if (chatInviteLinks && chatInviteLinks.length > 0) {
                             const existingLink = chatInviteLinks[0];
@@ -376,7 +390,31 @@ ${existingLink.invite_link}
 💡 Перейдите по ссылке для присоединения к каналу
                             `);
                         } else {
-                            throw new Error('No existing invite links found');
+                            console.log('No existing invite links found, trying to get chat info...');
+                            
+                            // Пытаемся получить информацию о канале
+                            try {
+                                const chatInfo = await this.bot.getChat(config.telegram.channelId);
+                                console.log('Chat info:', chatInfo);
+                                
+                                // Если канал публичный, отправляем ссылку на канал
+                                if (chatInfo.username) {
+                                    const channelLink = `https://t.me/${chatInfo.username}`;
+                                    await this.bot.sendMessage(userId, `
+🎉 Поздравляем! Оплата прошла успешно!
+
+🔗 Ссылка для доступа к каналу:
+${channelLink}
+
+💡 Перейдите по ссылке для присоединения к каналу
+                                    `);
+                                } else {
+                                    throw new Error('Channel is private and no invite links available');
+                                }
+                            } catch (chatError) {
+                                console.error('Failed to get chat info:', chatError.message);
+                                throw new Error('No access method available');
+                            }
                         }
                     } catch (fallbackError) {
                         console.error('❌ Fallback failed:', fallbackError.message);
@@ -390,6 +428,11 @@ ${existingLink.invite_link}
 
 Ваш ID: ${userId}
 Проблема: ${inviteError.response?.body?.description || inviteError.message}
+
+💡 Возможные причины:
+• Бот не является администратором канала
+• У бота нет прав на создание invite-ссылок
+• Канал имеет ограничения на присоединение
                         `);
                     }
                 }
