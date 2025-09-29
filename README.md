@@ -47,6 +47,11 @@ NODE_ENV=development
 # Database
 DATABASE_PATH=./bot.db
 ```
+Запустить в отдельном окне терминала Python
+1. pyton -m venv .venv
+2. ./venv/bin/activate
+3. curl -O https://pagekite.net/pk/pagekite.py
+4. python3 pagekite.py 3000 yourname.pagekite.me
 
 ### 3. Получение необходимых данных
 
