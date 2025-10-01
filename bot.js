@@ -111,6 +111,7 @@ class TelegramBotApp {
             const keyboard = {
                     inline_keyboard: [
                     [{ text: '💳 Оплатить', callback_data: 'pay' }],
+                    [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
                     [{ text: '❓ Помощь', callback_data: 'help' }]
                 ]
             };
@@ -218,7 +219,14 @@ ${paymentLink}
 📞 Поддержка: @Fun_Oleg
         `;
 
-        this.bot.sendMessage(chatId, helpMessage);
+        const keyboard = {
+            inline_keyboard: [
+                [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
+                [{ text: '💳 Оплатить доступ', callback_data: 'pay' }]
+            ]
+        };
+
+        this.bot.sendMessage(chatId, helpMessage, { reply_markup: keyboard });
     }
 
     async handlePaymentCheck(chatId, userId) {
@@ -902,12 +910,16 @@ ${config.prodamus.linkToForm}
             const daysLeft = Math.ceil((endDate - new Date()) / (1000 * 60 * 60 * 24));
             
             const keyboard = {
-                inline_keyboard: [[
-                    {
+                inline_keyboard: [
+                    [{
                         text: '🔄 Продлить подписку',
                         callback_data: 'renew_subscription'
-                    }
-                ]]
+                    }],
+                    [{
+                        text: '👤 Индивидуальная консультация',
+                        url: 'https://wa.me/79025158278'
+                    }]
+                ]
             };
 
             await this.bot.sendMessage(userId, `
