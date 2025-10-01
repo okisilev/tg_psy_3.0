@@ -646,7 +646,7 @@ AND DATE(end_date) BETWEEN DATE('now') AND DATE('now', '+7 days');
 
 ### Контакты:
 - 📞 Telegram: @Fun_Oleg
-- 💬 WhatsApp: +79025158278
+
 
 ### Полезные ссылки:
 - [Документация Telegram Bot API](https://core.telegram.org/bots/api)
