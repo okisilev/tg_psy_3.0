@@ -1,0 +1,32 @@
+[Unit]
+Description=PageKite Tunnel Service for Telegram Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=your_user
+Group=your_user
+WorkingDirectory=/path/to/tg_psy_3.0
+ExecStart=/usr/bin/python3 /path/to/tg_psy_3.0/pagekite.py 3000 dashastar.pagekite.me
+
+# Автоматический перезапуск
+Restart=always
+RestartSec=10
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pagekite
+
+# Ограничения ресурсов
+MemoryLimit=500M
+CPUQuota=50%
+
+# Безопасность
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+

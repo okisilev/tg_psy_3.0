@@ -5,7 +5,18 @@
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js",
-    "dev": "nodemon bot.js"
+    "dev": "nodemon bot.js",
+    "migrate": "node migration-add-is-banned.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop all",
+    "pm2:restart": "pm2 restart all",
+    "pm2:logs": "pm2 logs",
+    "pm2:monit": "pm2 monit",
+    "production": "bash start-production.sh start",
+    "production:stop": "bash start-production.sh stop",
+    "production:restart": "bash start-production.sh restart",
+    "production:status": "bash start-production.sh status",
+    "production:logs": "bash start-production.sh logs"
   },
   "dependencies": {
     "node-telegram-bot-api": "^0.64.0",

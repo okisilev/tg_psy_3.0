@@ -1,0 +1,38 @@
+[Unit]
+Description=Telegram Payment Bot Service
+After=network.target pagekite.service
+Wants=network-online.target
+Requires=pagekite.service
+
+[Service]
+Type=simple
+User=your_user
+Group=your_user
+WorkingDirectory=/path/to/tg_psy_3.0
+
+# Загрузка переменных окружения из .env
+EnvironmentFile=/path/to/tg_psy_3.0/.env
+
+# Запуск бота
+ExecStart=/usr/bin/node /path/to/tg_psy_3.0/bot.js
+
+# Автоматический перезапуск
+Restart=always
+RestartSec=10
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=telegram-bot
+
+# Ограничения ресурсов
+MemoryLimit=1G
+CPUQuota=80%
+
+# Безопасность
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
