@@ -31,10 +31,10 @@ class TelegramBotApp {
             process.exit(1);
         }
 
-        // Проверяем ID канала
+        // Проверяем ID канала/группы
         if (!config.telegram.channelId || config.telegram.channelId === '@your_channel_username') {
-            console.error('❌ ОШИБКА: Не указан ID канала!');
-            console.error('📝 Укажите ID канала в TELEGRAM_CHANNEL_ID в файле .env');
+            console.error('❌ ОШИБКА: Не указан ID канала/группы!');
+            console.error('📝 Укажите ID канала или группы в TELEGRAM_CHANNEL_ID в файле .env');
             process.exit(1);
         }
 
@@ -100,9 +100,10 @@ class TelegramBotApp {
             const welcomeMessage = `
 🎉 Добро пожаловать!
 
-Для получения доступа к закрытому каналу необходимо произвести оплату.
+Для получения доступа к закрытому сообществу необходимо произвести оплату.
 
 💰 Стоимость: 2000 рублей
+⏰ Срок доступа: 30 дней
 
 Нажмите кнопку "Оплатить" для перехода к оплате.
             `;
@@ -177,7 +178,7 @@ class TelegramBotApp {
         try {
             // Создаем развернутую ссылку согласно документации Prodamus
             // Используем do=pay для прямого перехода к оплате без подписи
-            const paymentData = prodamusService.createPaymentData(userId, 2000.00, 'Доступ к закрытому каналу', 'expanded');
+            const paymentData = prodamusService.createPaymentData(userId, 2000.00, 'Доступ к закрытому сообществу на 30 дней', 'expanded');
             const paymentLink = prodamusService.createExpandedPaymentLink(paymentData);
 
             const message = `
@@ -185,7 +186,7 @@ class TelegramBotApp {
 
 ${paymentLink}
 
-После успешной оплаты вы автоматически получите доступ к каналу.
+После успешной оплаты вы автоматически получите доступ к сообществу.
 
 ⏰ Ссылка действительна в течение 24 часов.
             `;
@@ -210,8 +211,9 @@ ${paymentLink}
             const helpMessage = `
 ❓ Помощь
 
-🔹 Для получения доступа к каналу необходимо произвести оплату
+🔹 Для получения доступа к закрытому сообществу необходимо произвести оплату
 🔹 Стоимость: 2000 рублей
+🔹 Срок доступа: 30 дней
 🔹 После оплаты доступ предоставляется автоматически
 🔹 Если у вас возникли проблемы, обратитесь к администратору
 
@@ -234,7 +236,7 @@ ${paymentLink}
             const payment = await this.getUserPayment(userId);
             
             if (payment && payment.status === 'success') {
-                this.bot.sendMessage(chatId, '✅ Оплата подтверждена! Доступ к каналу предоставлен.');
+                this.bot.sendMessage(chatId, '✅ Оплата подтверждена! Доступ к сообществу предоставлен.');
                 await this.grantChannelAccess(userId);
                 return;
             }
@@ -308,17 +310,28 @@ ${paymentLink}
             console.log('Channel ID from config:', config.telegram.channelId);
             console.log('Channel ID type:', typeof config.telegram.channelId);
             
-            // Проверяем, что ID канала правильный (начинается с -10, -20 или -100)
-            if (!config.telegram.channelId.toString().startsWith('-10') && 
-                !config.telegram.channelId.toString().startsWith('-20') &&
-                !config.telegram.channelId.toString().startsWith('-100')) {
-                console.log('❌ ID канала неправильный (должен начинаться с -10, -20 или -100)');
+            // Проверяем, что ID правильный (должен начинаться с минуса)
+            const chatId = config.telegram.channelId.toString();
+            if (!chatId.startsWith('-')) {
+                console.log('❌ ID неправильный (должен начинаться с минуса)');
                 console.log('Текущий ID:', config.telegram.channelId);
-                throw new Error('Invalid channel ID format');
+                throw new Error('Invalid chat ID format - must start with "-"');
             }
             
-            // Для каналов используем только invite-ссылки (прямое добавление не работает)
-            console.log(`Using invite link approach for channel ${config.telegram.channelId}`);
+            // Определяем тип чата
+            let chatType = 'unknown';
+            if (chatId.startsWith('-100')) {
+                chatType = 'supergroup';
+            } else if (chatId.startsWith('-20')) {
+                chatType = 'channel';
+            } else if (chatId.startsWith('-')) {
+                chatType = 'group';
+            }
+            
+            console.log(`✅ Chat ID format is valid (type: ${chatType})`);
+            
+            // Для каналов и групп используем только invite-ссылки
+            console.log(`Using invite link approach for ${chatType} ${config.telegram.channelId}`);
             
             let inviteLink;
             if (config.telegram.permanentInviteLink) {
@@ -354,10 +367,11 @@ ${paymentLink}
             await this.bot.sendMessage(userId, `
 🎉 Поздравляем! Оплата прошла успешно!
 
-🔗 Ссылка для доступа к каналу:
+🔗 Ссылка для доступа к сообществу:
 ${inviteLink}
 
-💡 Перейдите по ссылке для присоединения к каналу
+💡 Перейдите по ссылке для присоединения
+⏰ Ваша подписка действует 30 дней
             `);
             
             console.log(`✅ Invite link sent to user ${userId}`);
@@ -426,9 +440,9 @@ ${inviteLink}
             const user = await this.getUser(userId);
             
             if (user && user.has_access) {
-                this.bot.sendMessage(chatId, '✅ У вас уже есть доступ к каналу!');
+                this.bot.sendMessage(chatId, '✅ У вас уже есть доступ к сообществу!');
             } else {
-                this.bot.sendMessage(chatId, '❌ У вас нет доступа к каналу. Произведите оплату для получения доступа.');
+                this.bot.sendMessage(chatId, '❌ У вас нет доступа к сообществу. Произведите оплату для получения доступа.');
             }
         } catch (error) {
             console.error('Error checking user access:', error);
@@ -813,7 +827,7 @@ ${inviteLink}
                 await this.bot.sendMessage(userId, `
 ❌ Ваша подписка истекла
 
-📅 Доступ к закрытому каналу был приостановлен.
+📅 Доступ к закрытому сообществу был приостановлен.
 
 🔄 Для восстановления доступа продлите подписку:
 ${config.prodamus.linkToForm}
