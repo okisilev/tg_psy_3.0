@@ -640,8 +640,23 @@ ${inviteLink}
                 
                 console.log('Subscription created for 30 days');
                 
-                // Предоставляем доступ к каналу
-                await this.grantChannelAccess(parseInt(telegramId));
+                // Проверяем, был ли пользователь ранее удален (мягкое удаление)
+                const isBanned = await this.databaseService.isUserBanned(parseInt(telegramId));
+                
+                if (isBanned) {
+                    console.log(`🔄 Пользователь ${telegramId} был помечен как удаленный, восстанавливаем доступ`);
+                    
+                    // Восстанавливаем доступ (включая снятие флага бана)
+                    await this.restoreChannelAccess(parseInt(telegramId), paymentId);
+                    
+                    // Предоставляем доступ к каналу (отправляем invite-ссылку)
+                    await this.grantChannelAccess(parseInt(telegramId));
+                } else {
+                    console.log(`✅ Новый пользователь ${telegramId}, предоставляем доступ`);
+                    
+                    // Предоставляем доступ к каналу
+                    await this.grantChannelAccess(parseInt(telegramId));
+                }
                 
                 // Отправляем уведомление администратору
                 await this.notifyAdminAboutPayment(parseInt(telegramId), {
@@ -767,23 +782,28 @@ ${inviteLink}
     }
 
     /**
-     * Удаляет пользователя из канала
+     * Удаляет пользователя из канала (мягкое удаление)
      * @param {number} userId - ID пользователя
      * @returns {Promise<boolean>} - успешно ли удален
      */
     async kickUserFromChannel(userId) {
         try {
-            console.log(`Attempting to kick user ${userId} from channel ${config.telegram.channelId}`);
+            console.log(`🔄 Мягкое удаление пользователя ${userId} из канала ${config.telegram.channelId}`);
             
-            // Пытаемся удалить пользователя из канала
-            await this.bot.banChatMember(config.telegram.channelId, userId);
-            console.log(`✅ User ${userId} kicked from channel successfully`);
+            // МЯГКОЕ УДАЛЕНИЕ: помечаем пользователя как забаненного в БД, но НЕ баним реально
+            await this.databaseService.softDeleteUser(userId);
+            console.log(`✅ Пользователь ${userId} помечен как удаленный (мягкое удаление)`);
             
-            // Обновляем статус доступа в базе данных
-            await this.databaseService.updateUserAccess(userId, false);
+            // Логируем действие
+            await this.databaseService.addLog(
+                userId,
+                'soft_delete',
+                'Пользователь помечен как удаленный из-за истечения подписки (мягкое удаление)'
+            );
             
             // Отправляем уведомление пользователю
-            await this.bot.sendMessage(userId, `
+            try {
+                await this.bot.sendMessage(userId, `
 ❌ Ваша подписка истекла
 
 📅 Доступ к закрытому каналу был приостановлен.
@@ -792,16 +812,82 @@ ${inviteLink}
 ${config.prodamus.linkToForm}
 
 💳 После оплаты доступ будет автоматически восстановлен.
-            `);
+                `);
+                console.log(`✅ Уведомление об истечении отправлено пользователю ${userId}`);
+            } catch (msgError) {
+                console.log(`⚠️ Не удалось отправить уведомление пользователю ${userId}:`, msgError.message);
+            }
             
-            console.log(`✅ Expiry notification sent to user ${userId}`);
             return true;
             
         } catch (error) {
-            console.error(`❌ Failed to kick user ${userId} from channel:`, error.message);
-            console.error('Error code:', error.response?.body?.error_code);
-            console.error('Error description:', error.response?.body?.description);
+            console.error(`❌ Ошибка при мягком удалении пользователя ${userId}:`, error.message);
             return false;
+        }
+    }
+
+    /**
+     * Восстанавливает доступ пользователю после оплаты
+     * @param {number} userId - ID пользователя
+     * @param {number} paymentId - ID платежа
+     * @returns {Promise<Object>} - результат восстановления
+     */
+    async restoreChannelAccess(userId, paymentId) {
+        try {
+            console.log(`🔄 Восстановление доступа для пользователя ${userId}`);
+            
+            // 1. Проверяем, был ли пользователь ранее забанен (мягкое удаление)
+            const isBanned = await this.databaseService.isUserBanned(userId);
+            
+            if (isBanned) {
+                console.log(`ℹ️ Пользователь ${userId} был помечен как удаленный, восстанавливаем доступ`);
+                
+                // Восстанавливаем пользователя в БД (убираем флаг бана)
+                await this.databaseService.restoreUser(userId);
+                console.log(`✅ Флаг бана снят для пользователя ${userId}`);
+            } else {
+                // Если не был забанен, просто обновляем доступ
+                await this.databaseService.updateUserAccess(userId, true);
+                console.log(`✅ Доступ обновлен для пользователя ${userId}`);
+            }
+            
+            // 2. Получаем информацию о подписке
+            const subscription = await this.databaseService.getActiveSubscription(userId);
+            
+            if (subscription) {
+                // 3. Отправляем подтверждение пользователю
+                const endDate = new Date(subscription.end_date);
+                
+                try {
+                    await this.bot.sendMessage(userId, `
+✅ Доступ восстановлен!
+
+🎉 Ваша подписка успешно активирована!
+
+📅 Срок действия: до ${endDate.toLocaleDateString('ru-RU')}
+
+💡 Вы можете просматривать весь контент канала.
+                    `);
+                    console.log(`✅ Уведомление о восстановлении отправлено пользователю ${userId}`);
+                } catch (msgError) {
+                    console.log(`⚠️ Не удалось отправить подтверждение пользователю ${userId}:`, msgError.message);
+                }
+            }
+            
+            // 4. Логируем действие
+            await this.databaseService.addLog(
+                userId,
+                'access_restored',
+                `Доступ восстановлен после оплаты (payment_id: ${paymentId})`
+            );
+            
+            console.log(`✅ Доступ полностью восстановлен для пользователя ${userId}`);
+            
+            return { success: true, wasBanned: isBanned };
+            
+        } catch (error) {
+            console.error(`❌ Ошибка восстановления доступа для пользователя ${userId}:`, error);
+            return { success: false, error: error.message };
         }
     }
 

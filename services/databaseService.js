@@ -21,6 +21,7 @@ class DatabaseService {
                     first_name TEXT,
                     last_name TEXT,
                     has_access BOOLEAN DEFAULT FALSE,
+                    is_banned BOOLEAN DEFAULT FALSE,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
@@ -461,6 +462,69 @@ class DatabaseService {
         const hasActiveSubscription = await this.hasActiveSubscription(telegramId);
         await this.updateUserAccess(telegramId, hasActiveSubscription);
         return hasActiveSubscription;
+    }
+
+    /**
+     * Помечает пользователя как забаненного (мягкое удаление)
+     * @param {number} telegramId - ID пользователя в Telegram
+     * @returns {Promise<number>} - количество обновленных записей
+     */
+    async softDeleteUser(telegramId) {
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'UPDATE users SET is_banned = TRUE, has_access = FALSE, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = ?',
+                [telegramId],
+                function(err) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(this.changes);
+                    }
+                }
+            );
+        });
+    }
+
+    /**
+     * Восстанавливает пользователя (убирает флаг бана)
+     * @param {number} telegramId - ID пользователя в Telegram
+     * @returns {Promise<number>} - количество обновленных записей
+     */
+    async restoreUser(telegramId) {
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'UPDATE users SET is_banned = FALSE, has_access = TRUE, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = ?',
+                [telegramId],
+                function(err) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(this.changes);
+                    }
+                }
+            );
+        });
+    }
+
+    /**
+     * Проверяет, забанен ли пользователь
+     * @param {number} telegramId - ID пользователя в Telegram
+     * @returns {Promise<boolean>} - забанен ли пользователь
+     */
+    async isUserBanned(telegramId) {
+        return new Promise((resolve, reject) => {
+            this.db.get(
+                'SELECT is_banned FROM users WHERE telegram_id = ?',
+                [telegramId],
+                (err, row) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(row ? row.is_banned === 1 : false);
+                    }
+                }
+            );
+        });
     }
 
     /**
