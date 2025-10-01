@@ -102,7 +102,7 @@ class TelegramBotApp {
 
 Для получения доступа к закрытому каналу необходимо произвести оплату.
 
-💰 Стоимость: 500 рублей
+💰 Стоимость: 2000 рублей
 // 📺 Канал: ${config.telegram.channelId}
 
 Нажмите кнопку "Оплатить" для перехода к оплате.
@@ -178,7 +178,7 @@ class TelegramBotApp {
         try {
             // Создаем развернутую ссылку согласно документации Prodamus
             // Используем do=pay для прямого перехода к оплате без подписи
-            const paymentData = prodamusService.createPaymentData(userId, 500.00, 'Доступ к закрытому каналу', 'expanded');
+            const paymentData = prodamusService.createPaymentData(userId, 2000.00, 'Доступ к закрытому каналу', 'expanded');
             const paymentLink = prodamusService.createExpandedPaymentLink(paymentData);
 
             const message = `
@@ -212,7 +212,7 @@ ${paymentLink}
 ❓ Помощь
 
 🔹 Для получения доступа к каналу необходимо произвести оплату
-🔹 Стоимость: 500 рублей
+🔹 Стоимость: 2000 рублей
 🔹 После оплаты доступ предоставляется автоматически
 🔹 Если у вас возникли проблемы, обратитесь к администратору
 
