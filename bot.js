@@ -215,7 +215,7 @@ ${paymentLink}
 🔹 После оплаты доступ предоставляется автоматически
 🔹 Если у вас возникли проблемы, обратитесь к администратору
 
-📞 Поддержка: @admin_username
+📞 Поддержка: @Fun_Oleg
         `;
 
         this.bot.sendMessage(chatId, helpMessage);
