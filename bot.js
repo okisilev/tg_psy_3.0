@@ -120,7 +120,7 @@ class TelegramBotApp {
         });
 
         // Обработчик callback кнопок
-        this.bot.on('callback_query', (callbackQuery) => {
+        this.bot.on('callback_query', async (callbackQuery) => {
             const message = callbackQuery.message;
             const data = callbackQuery.data;
             const chatId = message.chat.id;
@@ -136,9 +136,93 @@ class TelegramBotApp {
                 case 'check_payment':
                     this.handlePaymentCheck(chatId, userId);
                     break;
+                case 'admin_stats':
+                    await this.showStats(chatId);
+                    break;
+                case 'admin_list_users':
+                    await this.listChannelUsers(chatId);
+                    break;
+                case 'admin_find_user':
+                    this.bot.sendMessage(chatId, '🔍 Введите ID пользователя для поиска:');
+                    break;
+                case 'admin_settings':
+                    this.bot.sendMessage(chatId, '⚙️ Настройки администратора:\n\n• Добавить админа: /addadmin [ID]\n• Удалить админа: /removeadmin [ID]\n• Список админов: /listadmins');
+                    break;
             }
 
             this.bot.answerCallbackQuery(callbackQuery.id);
+        });
+
+        // Команда для добавления администратора
+        this.bot.onText(/\/addadmin (\d+)/, (msg, match) => {
+            const chatId = msg.chat.id;
+            const userId = msg.from.id;
+            const newAdminId = parseInt(match[1]);
+            
+            if (!this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
+                return;
+            }
+            
+            // Добавляем нового админа (в реальном проекте лучше хранить в БД)
+            this.bot.sendMessage(chatId, `✅ Администратор ${newAdminId} добавлен.\n\n⚠️ Для постоянного добавления обновите код в функции isAdmin().`);
+        });
+
+        // Команда для просмотра списка администраторов
+        this.bot.onText(/\/listadmins/, (msg) => {
+            const chatId = msg.chat.id;
+            const userId = msg.from.id;
+            
+            if (!this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
+                return;
+            }
+            
+            const adminIds = [431292182]; // Список из функции isAdmin
+            let adminList = '👑 Список администраторов:\n\n';
+            adminIds.forEach((id, index) => {
+                adminList += `${index + 1}. ${id}\n`;
+            });
+            
+            this.bot.sendMessage(chatId, adminList);
+        });
+
+        // Команда для проверки прав администратора
+        this.bot.onText(/\/checkadmin/, (msg) => {
+            const chatId = msg.chat.id;
+            const userId = msg.from.id;
+            
+            if (this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '👑 Вы администратор! У вас есть полные права.');
+            } else {
+                this.bot.sendMessage(chatId, '❌ Вы не администратор.');
+            }
+        });
+
+        // Обработчик команд администратора
+        this.bot.onText(/\/admin/, (msg) => {
+            const chatId = msg.chat.id;
+            const userId = msg.from.id;
+            
+            if (!this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
+                return;
+            }
+            
+            const adminKeyboard = {
+                inline_keyboard: [
+                    [{ text: '📊 Статистика', callback_data: 'admin_stats' }],
+                    [{ text: '👥 Список пользователей', callback_data: 'admin_list_users' }],
+                    [{ text: '🔍 Найти пользователя', callback_data: 'admin_find_user' }],
+                    [{ text: '⚙️ Настройки', callback_data: 'admin_settings' }]
+                ]
+            };
+            
+            this.bot.sendMessage(chatId, `
+👑 Панель администратора
+
+Выберите действие:
+            `, { reply_markup: adminKeyboard });
         });
 
         // Обработчик текстовых сообщений
@@ -176,6 +260,12 @@ class TelegramBotApp {
 
     async handlePaymentRequest(chatId, userId) {
         try {
+            // Проверяем, является ли пользователь администратором
+            if (this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '👑 Вы администратор! Вам не нужно оплачивать доступ - у вас есть полные права.');
+                return;
+            }
+            
             // Создаем развернутую ссылку согласно документации Prodamus
             // Используем do=pay для прямого перехода к оплате без подписи
             const paymentData = prodamusService.createPaymentData(userId, 2000.00, 'Доступ к закрытому сообществу на 30 дней', 'expanded');
@@ -232,6 +322,12 @@ ${paymentLink}
 
     async handlePaymentCheck(chatId, userId) {
         try {
+            // Проверяем, является ли пользователь администратором
+            if (this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '👑 Вы администратор! Вам не нужно проверять платежи - у вас есть полный доступ.');
+                return;
+            }
+            
             // Проверяем в базе данных
             const payment = await this.getUserPayment(userId);
             
@@ -287,7 +383,26 @@ ${paymentLink}
 
     async grantChannelAccess(userId) {
         try {
-            // Проверяем активную подписку
+            // Проверяем, является ли пользователь администратором
+            if (this.isAdmin(userId)) {
+                console.log(`👑 Admin ${userId} - granting access without subscription check`);
+                await this.updateUserAccess(userId, true);
+                
+                // Отправляем специальное сообщение администратору
+                await this.bot.sendMessage(userId, `
+👑 Администратор!
+
+✅ Вам предоставлен полный доступ к сообществу.
+
+🔧 Вы можете:
+• Просматривать весь контент
+• Управлять участниками
+• Использовать все функции без ограничений
+                `);
+                return true;
+            }
+            
+            // Проверяем активную подписку для обычных пользователей
             const hasActiveSubscription = await this.databaseService.hasActiveSubscription(userId);
             if (!hasActiveSubscription) {
                 console.log(`❌ User ${userId} has no active subscription`);
@@ -437,6 +552,12 @@ ${inviteLink}
 
     async checkUserAccess(chatId, userId) {
         try {
+            // Проверяем, является ли пользователь администратором
+            if (this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '👑 Вы администратор! У вас есть полный доступ к сообществу.');
+                return;
+            }
+            
             const user = await this.getUser(userId);
             
             if (user && user.has_access) {
@@ -450,8 +571,11 @@ ${inviteLink}
     }
 
     isAdmin(userId) {
-        // Добавьте ID администраторов в конфигурацию
-        const adminIds = [431292182]; // Замените на реальные ID администраторов
+        // ID администраторов (владельцы группы/канала)
+        const adminIds = [
+            431292182,  // Основной администратор
+            // Добавьте сюда ID других администраторов
+        ];
         return adminIds.includes(userId);
     }
 
