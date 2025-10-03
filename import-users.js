@@ -10,6 +10,7 @@ const users = [
     { telegram_id: 477583663, username: 'llosevaaa', first_name: '𝓙𝓾𝓵𝓲🩶', created_at: '2025-09-19' },
     { telegram_id: 1099251026, username: 'Byk_Lana', first_name: 'Лана', created_at: '2025-09-19' },
     { telegram_id: 7973542905, username: 'stayaWAW', first_name: 'Ольга 🃏', created_at: '2025-09-23' },
+    { telegram_id: 1291454597, username: 'Taya1989', first_name: 'Тая', created_at: '2025-09-19' },
     // Добавьте сюда своих пользователей
 ];
 
