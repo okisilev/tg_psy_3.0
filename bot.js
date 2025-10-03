@@ -157,6 +157,12 @@ class TelegramBotApp {
         this.bot.onText(/\/addadmin (\d+)/, (msg, match) => {
             const chatId = msg.chat.id;
             const userId = msg.from.id;
+            
+            // Работает только в личных сообщениях
+            if (chatId !== userId) {
+                return;
+            }
+            
             const newAdminId = parseInt(match[1]);
             
             if (!this.isAdmin(userId)) {
@@ -173,12 +179,17 @@ class TelegramBotApp {
             const chatId = msg.chat.id;
             const userId = msg.from.id;
             
+            // Работает только в личных сообщениях
+            if (chatId !== userId) {
+                return;
+            }
+            
             if (!this.isAdmin(userId)) {
                 this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
                 return;
             }
             
-            const adminIds = [431292182]; // Список из функции isAdmin
+            const adminIds = [431292182, 190545165]; // Список из функции isAdmin
             let adminList = '👑 Список администраторов:\n\n';
             adminIds.forEach((id, index) => {
                 adminList += `${index + 1}. ${id}\n`;
@@ -192,6 +203,11 @@ class TelegramBotApp {
             const chatId = msg.chat.id;
             const userId = msg.from.id;
             
+            // Работает только в личных сообщениях
+            if (chatId !== userId) {
+                return;
+            }
+            
             if (this.isAdmin(userId)) {
                 this.bot.sendMessage(chatId, '👑 Вы администратор! У вас есть полные права.');
             } else {
@@ -203,6 +219,11 @@ class TelegramBotApp {
         this.bot.onText(/\/admin/, (msg) => {
             const chatId = msg.chat.id;
             const userId = msg.from.id;
+            
+            // Работает только в личных сообщениях
+            if (chatId !== userId) {
+                return;
+            }
             
             if (!this.isAdmin(userId)) {
                 this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
@@ -231,8 +252,13 @@ class TelegramBotApp {
                 return; // Команды обрабатываются отдельно
             }
 
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
+            const chatId = msg.chat.id;
+            const userId = msg.from.id;
+            
+            // Обрабатываем только личные сообщения с ботом (не в группах)
+            if (chatId !== userId) {
+                return; // Игнорируем сообщения в группах/каналах
+            }
     
             // Проверяем, есть ли у пользователя доступ
             this.checkUserAccess(chatId, userId);
