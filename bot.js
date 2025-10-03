@@ -110,7 +110,6 @@ class TelegramBotApp {
                 const adminKeyboard = {
                     inline_keyboard: [
                         [{ text: '👑 Панель администратора', callback_data: 'admin_panel' }],
-                        [{ text: '👥 Без доступа', callback_data: 'no_access_users' }],
                         [{ text: '💳 Оплатить', callback_data: 'pay' }],
                         [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
                         [{ text: '❓ Помощь', callback_data: 'help' }]
@@ -1216,11 +1215,12 @@ ${config.prodamus.linkToForm}
                 SELECT u.telegram_id, u.username, u.first_name, u.last_name, 
                        s.end_date, u.is_banned, u.has_access
                 FROM users u
-                LEFT JOIN subscriptions s ON u.telegram_id = s.telegram_id
-                WHERE (u.has_access = FALSE OR s.end_date < datetime('now'))
+                LEFT JOIN subscriptions s ON u.telegram_id = s.user_id
+                WHERE (u.has_access = 0 OR s.end_date < datetime('now'))
                 ORDER BY s.end_date DESC
             `, (err, rows) => {
                 if (err) {
+                    console.error('Error in getNoAccessUsers SQL query:', err);
                     reject(err);
                 } else {
                     resolve(rows || []);
