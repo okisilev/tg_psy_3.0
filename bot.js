@@ -97,6 +97,30 @@ class TelegramBotApp {
             // Сохраняем пользователя в базу данных
             this.saveUser(userId, username, firstName, lastName);
             
+            // Проверяем, является ли пользователь администратором
+            if (this.isAdmin(userId)) {
+                const adminWelcomeMessage = `
+👑 Добро пожаловать, администратор!
+
+У вас есть полный доступ к сообществу и административные функции.
+
+🔧 Выберите действие:
+                `;
+
+                const adminKeyboard = {
+                    inline_keyboard: [
+                        [{ text: '👑 Панель администратора', callback_data: 'admin_panel' }],
+                        [{ text: '👥 Без доступа', callback_data: 'no_access_users' }],
+                        [{ text: '💳 Оплатить', callback_data: 'pay' }],
+                        [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
+                        [{ text: '❓ Помощь', callback_data: 'help' }]
+                    ]
+                };
+
+                this.bot.sendMessage(chatId, adminWelcomeMessage, { reply_markup: adminKeyboard });
+                return;
+            }
+            
             const welcomeMessage = `
 🎉 Добро пожаловать!
 
@@ -135,6 +159,12 @@ class TelegramBotApp {
                     break;
                 case 'check_payment':
                     this.handlePaymentCheck(chatId, userId);
+                    break;
+                case 'admin_panel':
+                    await this.showAdminPanel(chatId, userId);
+                    break;
+                case 'no_access_users':
+                    await this.showNoAccessUsers(chatId, userId);
                     break;
                 case 'admin_stats':
                     await this.showStats(chatId);
@@ -1103,6 +1133,126 @@ ${config.prodamus.linkToForm}
         } catch (error) {
             console.error(`❌ Failed to send expiry notification to user ${userId}:`, error.message);
         }
+    }
+
+    // Показать панель администратора
+    async showAdminPanel(chatId, userId) {
+        try {
+            if (!this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
+                return;
+            }
+            
+            const adminKeyboard = {
+                inline_keyboard: [
+                    [{ text: '📊 Статистика', callback_data: 'admin_stats' }],
+                    [{ text: '👥 Список пользователей', callback_data: 'admin_list_users' }],
+                    [{ text: '👥 Без доступа', callback_data: 'no_access_users' }],
+                    [{ text: '🔍 Найти пользователя', callback_data: 'admin_find_user' }],
+                    [{ text: '⚙️ Настройки', callback_data: 'admin_settings' }]
+                ]
+            };
+            
+            this.bot.sendMessage(chatId, `
+👑 Панель администратора
+
+Выберите действие:
+            `, { reply_markup: adminKeyboard });
+        } catch (error) {
+            console.error('Error showing admin panel:', error);
+            this.bot.sendMessage(chatId, '❌ Ошибка при открытии панели администратора.');
+        }
+    }
+
+    // Показать пользователей без доступа
+    async showNoAccessUsers(chatId, userId) {
+        try {
+            if (!this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
+                return;
+            }
+            
+            // Получаем пользователей с истекшей подпиской
+            const noAccessUsers = await this.getNoAccessUsers();
+            
+            if (noAccessUsers.length === 0) {
+                this.bot.sendMessage(chatId, '✅ Все пользователи имеют активный доступ!');
+                return;
+            }
+            
+            let message = `👥 Пользователи без доступа (${noAccessUsers.length}):\n\n`;
+            
+            noAccessUsers.forEach((user, index) => {
+                const endDate = new Date(user.end_date);
+                const daysAgo = Math.ceil((new Date() - endDate) / (1000 * 60 * 60 * 24));
+                
+                message += `${index + 1}. ID: ${user.telegram_id}\n`;
+                message += `   👤 Username: @${user.username || 'не указан'}\n`;
+                message += `   📅 Истекла: ${endDate.toLocaleDateString('ru-RU')}\n`;
+                message += `   ⏰ Дней назад: ${daysAgo}\n`;
+                message += `   🚫 Статус: ${user.is_banned ? 'Заблокирован' : 'Неактивен'}\n\n`;
+            });
+            
+            // Разбиваем сообщение на части, если оно слишком длинное
+            if (message.length > 4000) {
+                const parts = this.splitMessage(message, 4000);
+                for (const part of parts) {
+                    await this.bot.sendMessage(chatId, part);
+                }
+            } else {
+                await this.bot.sendMessage(chatId, message);
+            }
+            
+        } catch (error) {
+            console.error('Error showing no access users:', error);
+            this.bot.sendMessage(chatId, '❌ Ошибка при получении списка пользователей без доступа.');
+        }
+    }
+
+    // Получить пользователей без доступа
+    async getNoAccessUsers() {
+        return new Promise((resolve, reject) => {
+            this.db.all(`
+                SELECT u.telegram_id, u.username, u.first_name, u.last_name, 
+                       s.end_date, u.is_banned, u.has_access
+                FROM users u
+                LEFT JOIN subscriptions s ON u.telegram_id = s.telegram_id
+                WHERE (u.has_access = FALSE OR s.end_date < datetime('now'))
+                ORDER BY s.end_date DESC
+            `, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows || []);
+                }
+            });
+        });
+    }
+
+    // Разделить длинное сообщение на части
+    splitMessage(message, maxLength) {
+        const parts = [];
+        let currentPart = '';
+        const lines = message.split('\n');
+        
+        for (const line of lines) {
+            if (currentPart.length + line.length + 1 > maxLength) {
+                if (currentPart) {
+                    parts.push(currentPart);
+                    currentPart = line;
+                } else {
+                    parts.push(line);
+                }
+            } else {
+                currentPart += (currentPart ? '\n' : '') + line;
+            }
+        }
+        
+        if (currentPart) {
+            parts.push(currentPart);
+        }
+        
+        return parts;
     }
 
     /**
