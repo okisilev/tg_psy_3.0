@@ -336,7 +336,7 @@ class DatabaseService {
             endDate.setDate(endDate.getDate() + durationDays);
             
             const stmt = this.db.prepare(`
-                INSERT INTO subscriptions (telegram_id, payment_id, start_date, end_date, is_active)
+                INSERT INTO subscriptions (user_id, payment_id, start_date, end_date, is_active)
                 VALUES (?, ?, ?, ?, TRUE)
             `);
             
@@ -396,7 +396,7 @@ class DatabaseService {
             this.db.all(`
                 SELECT s.*, u.first_name, u.username 
                 FROM subscriptions s
-                JOIN users u ON s.telegram_id = u.telegram_id
+                JOIN users u ON s.user_id = u.telegram_id
                 WHERE s.is_active = TRUE 
                 AND DATE(s.end_date) = DATE(?)
                 ORDER BY s.end_date ASC
@@ -419,7 +419,7 @@ class DatabaseService {
             this.db.all(`
                 SELECT s.*, u.first_name, u.username 
                 FROM subscriptions s
-                JOIN users u ON s.telegram_id = u.telegram_id
+                JOIN users u ON s.user_id = u.telegram_id
                 WHERE s.is_active = TRUE 
                 AND s.end_date <= datetime('now')
                 ORDER BY s.end_date ASC
