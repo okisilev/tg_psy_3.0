@@ -112,6 +112,7 @@ class TelegramBotApp {
                         [{ text: '👑 Панель администратора', callback_data: 'admin_panel' }],
                         [{ text: '🎯 Вступить в клуб', callback_data: 'pay' }],
                         [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
+                        [{ text: '⭐ Отзывы', url: 'https://t.me/+7SYsD5HTemBmNDIy' }],
                         [{ text: '❓ Помощь', callback_data: 'help' }]
                     ]
                 };
@@ -163,6 +164,7 @@ class TelegramBotApp {
                     inline_keyboard: [
                     [{ text: '🎯 Вступить в клуб', callback_data: 'pay' }],
                     [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
+                    [{ text: '⭐ Отзывы', url: 'https://t.me/+7SYsD5HTemBmNDIy' }],
                     [{ text: '❓ Помощь', callback_data: 'help' }]
                 ]
             };
@@ -396,6 +398,7 @@ ${paymentLink}
         const keyboard = {
             inline_keyboard: [
                 [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
+                [{ text: '⭐ Отзывы', url: 'https://t.me/+7SYsD5HTemBmNDIy' }],
                 [{ text: '🎯 Вступить в клуб', callback_data: 'pay' }]
             ]
         };
