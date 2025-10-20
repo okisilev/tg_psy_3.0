@@ -110,7 +110,7 @@ class TelegramBotApp {
                 const adminKeyboard = {
                     inline_keyboard: [
                         [{ text: '👑 Панель администратора', callback_data: 'admin_panel' }],
-                        [{ text: '💳 Оплатить', callback_data: 'pay' }],
+                        [{ text: '🎯 Вступить в клуб', callback_data: 'pay' }],
                         [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
                         [{ text: '❓ Помощь', callback_data: 'help' }]
                     ]
@@ -161,7 +161,7 @@ class TelegramBotApp {
 
             const keyboard = {
                     inline_keyboard: [
-                    [{ text: '💳 Оплатить', callback_data: 'pay' }],
+                    [{ text: '🎯 Вступить в клуб', callback_data: 'pay' }],
                     [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
                     [{ text: '❓ Помощь', callback_data: 'help' }]
                 ]
@@ -351,7 +351,7 @@ class TelegramBotApp {
             
             // Создаем развернутую ссылку согласно документации Prodamus
             // Используем do=pay для прямого перехода к оплате без подписи
-            const paymentData = prodamusService.createPaymentData(userId, 2000.00, 'Доступ к закрытому сообществу на 30 дней', 'expanded');
+            const paymentData = prodamusService.createPaymentData(userId, 2500.00, 'Доступ к закрытому сообществу на 30 дней', 'expanded');
             const paymentLink = prodamusService.createExpandedPaymentLink(paymentData);
 
             const message = `
@@ -385,7 +385,7 @@ ${paymentLink}
 ❓ Помощь
 
 🔹 Для получения доступа к закрытому сообществу необходимо произвести оплату
-🔹 Стоимость: 2000 рублей
+🔹 Стоимость: 2500 рублей
 🔹 Срок доступа: 30 дней
 🔹 После оплаты доступ предоставляется автоматически
 🔹 Если у вас возникли проблемы, обратитесь к администратору
@@ -396,7 +396,7 @@ ${paymentLink}
         const keyboard = {
             inline_keyboard: [
                 [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
-                [{ text: '💳 Оплатить доступ', callback_data: 'pay' }]
+                [{ text: '🎯 Вступить в клуб', callback_data: 'pay' }]
             ]
         };
 
