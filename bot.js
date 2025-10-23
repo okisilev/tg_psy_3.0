@@ -722,7 +722,13 @@ ${inviteLink}
                 }
             });
             
-            this.bot.sendMessage(chatId, message);
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '🔙 Назад', callback_data: 'admin_panel' }]
+                ]
+            };
+            
+            this.bot.sendMessage(chatId, message, { reply_markup: keyboard });
         } catch (error) {
             console.error('Error listing users:', error);
             this.bot.sendMessage(chatId, '❌ Ошибка получения списка пользователей.');
@@ -742,7 +748,13 @@ ${inviteLink}
 ✅ Успешных: ${stats.successfulPayments}
             `;
             
-            this.bot.sendMessage(chatId, message);
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '🔙 Назад', callback_data: 'admin_panel' }]
+                ]
+            };
+            
+            this.bot.sendMessage(chatId, message, { reply_markup: keyboard });
         } catch (error) {
             console.error('Error showing stats:', error);
             this.bot.sendMessage(chatId, '❌ Ошибка получения статистики.');
@@ -1406,7 +1418,12 @@ ${config.prodamus.linkToForm}
             const noAccessUsers = await this.getNoAccessUsers();
             
             if (noAccessUsers.length === 0) {
-                this.bot.sendMessage(chatId, '✅ Все пользователи имеют активный доступ!');
+                const keyboard = {
+                    inline_keyboard: [
+                        [{ text: '🔙 Назад', callback_data: 'admin_panel' }]
+                    ]
+                };
+                this.bot.sendMessage(chatId, '✅ Все пользователи имеют активный доступ!', { reply_markup: keyboard });
                 return;
             }
             
@@ -1423,14 +1440,26 @@ ${config.prodamus.linkToForm}
                 message += `   🚫 Статус: ${user.is_banned ? 'Заблокирован' : 'Неактивен'}\n\n`;
             });
             
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '🔙 Назад', callback_data: 'admin_panel' }]
+                ]
+            };
+            
             // Разбиваем сообщение на части, если оно слишком длинное
             if (message.length > 4000) {
                 const parts = this.splitMessage(message, 4000);
-                for (const part of parts) {
-                    await this.bot.sendMessage(chatId, part);
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    // Добавляем кнопку только к последней части
+                    if (i === parts.length - 1) {
+                        await this.bot.sendMessage(chatId, part, { reply_markup: keyboard });
+                    } else {
+                        await this.bot.sendMessage(chatId, part);
+                    }
                 }
             } else {
-                await this.bot.sendMessage(chatId, message);
+                await this.bot.sendMessage(chatId, message, { reply_markup: keyboard });
             }
             
         } catch (error) {
