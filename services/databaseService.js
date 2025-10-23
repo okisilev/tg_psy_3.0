@@ -336,11 +336,11 @@ class DatabaseService {
             endDate.setDate(endDate.getDate() + durationDays);
             
             const stmt = this.db.prepare(`
-                INSERT INTO subscriptions (user_id, payment_id, start_date, end_date, is_active)
-                VALUES (?, ?, ?, ?, TRUE)
+                INSERT INTO subscriptions (user_id, start_date, end_date, is_active)
+                VALUES (?, ?, ?, TRUE)
             `);
             
-            stmt.run([telegramId, paymentId, startDate.toISOString(), endDate.toISOString()], function(err) {
+            stmt.run([telegramId, startDate.toISOString(), endDate.toISOString()], function(err) {
                 if (err) {
                     reject(err);
                 } else {
@@ -361,7 +361,7 @@ class DatabaseService {
         return new Promise((resolve, reject) => {
             this.db.get(`
                 SELECT * FROM subscriptions 
-                WHERE telegram_id = ? AND is_active = TRUE AND end_date > datetime('now')
+                WHERE user_id = ? AND is_active = TRUE AND end_date > datetime('now')
                 ORDER BY end_date DESC LIMIT 1
             `, [telegramId], (err, row) => {
                 if (err) {

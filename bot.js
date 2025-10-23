@@ -136,6 +136,12 @@ class TelegramBotApp {
                 case 'admin_find_user':
                     this.bot.sendMessage(chatId, '🔍 Введите ID пользователя для поиска:');
                     break;
+                case 'admin_check_subscriptions':
+                    await this.showSubscriptionStatus(chatId, userId);
+                    break;
+                case 'test_notification':
+                    await this.testNotificationForUser(chatId, userId);
+                    break;
                 case 'admin_settings':
                     this.bot.sendMessage(chatId, '⚙️ Настройки администратора:\n\n• Добавить админа: /addadmin [ID]\n• Удалить админа: /removeadmin [ID]\n• Список админов: /listadmins');
                     break;
@@ -669,7 +675,7 @@ ${inviteLink}
     isAdmin(userId) {
         // ID администраторов (владельцы группы/канала)
         const adminIds = [
-            //431292182,  // Основной администратор
+            431292182,  // Основной администратор
             190545165,  // Владелец группы
             // Добавьте сюда ID других администраторов
         ];
@@ -1179,6 +1185,94 @@ ${config.prodamus.linkToForm}
         }
     }
 
+    // Тестирование оповещений для пользователя 431292182
+    async testNotificationForUser(chatId, userId) {
+        try {
+            if (!this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
+                return;
+            }
+
+            const testUserId = 431292182;
+            
+            // Проверяем, есть ли подписка у пользователя
+            const user = await this.databaseService.getUserByTelegramId(testUserId);
+            if (!user) {
+                this.bot.sendMessage(chatId, `❌ Пользователь ${testUserId} не найден в базе данных.`);
+                return;
+            }
+
+            // Получаем активную подписку пользователя
+            const subscription = await this.databaseService.getActiveSubscription(testUserId);
+            if (!subscription) {
+                this.bot.sendMessage(chatId, `❌ У пользователя ${testUserId} нет активной подписки.`);
+                return;
+            }
+
+            // Отправляем тестовое уведомление
+            await this.sendSubscriptionExpiryNotification(testUserId, subscription);
+            
+            this.bot.sendMessage(chatId, `✅ Тестовое уведомление отправлено пользователю ${testUserId}.\n\n📅 Дата окончания подписки: ${new Date(subscription.end_date).toLocaleDateString('ru-RU')}`);
+
+        } catch (error) {
+            console.error('Error testing notification:', error);
+            this.bot.sendMessage(chatId, '❌ Ошибка при отправке тестового уведомления.');
+        }
+    }
+
+    // Показать статус подписок
+    async showSubscriptionStatus(chatId, userId) {
+        try {
+            if (!this.isAdmin(userId)) {
+                this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
+                return;
+            }
+
+            // Получаем все активные подписки
+            const subscriptions = await this.databaseService.getExpiringSubscriptions();
+            
+            if (!subscriptions || subscriptions.length === 0) {
+                this.bot.sendMessage(chatId, '📊 Нет активных подписок для проверки.');
+                return;
+            }
+
+            let message = '⏰ Статус подписок:\n\n';
+            const now = new Date();
+            
+            for (const sub of subscriptions) {
+                const endDate = new Date(sub.end_date);
+                const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+                
+                let status = '';
+                if (daysLeft > 7) {
+                    status = '✅ Активна';
+                } else if (daysLeft > 0) {
+                    status = '⚠️ Истекает';
+                } else {
+                    status = '❌ Истекла';
+                }
+                
+                message += `👤 ${sub.first_name || 'Пользователь'} (@${sub.username || 'нет username'})\n`;
+                message += `📅 Окончание: ${endDate.toLocaleDateString('ru-RU')}\n`;
+                message += `⏰ Осталось дней: ${daysLeft}\n`;
+                message += `📊 Статус: ${status}\n\n`;
+            }
+
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '🔄 Обновить', callback_data: 'admin_check_subscriptions' }],
+                    [{ text: '🔙 Назад', callback_data: 'admin_panel' }]
+                ]
+            };
+
+            this.bot.sendMessage(chatId, message, { reply_markup: keyboard });
+
+        } catch (error) {
+            console.error('Error showing subscription status:', error);
+            this.bot.sendMessage(chatId, '❌ Ошибка при получении статуса подписок.');
+        }
+    }
+
     // Показать панель администратора
     async showAdminPanel(chatId, userId) {
         try {
@@ -1192,6 +1286,8 @@ ${config.prodamus.linkToForm}
                     [{ text: '📊 Статистика', callback_data: 'admin_stats' }],
                     [{ text: '👥 Список пользователей', callback_data: 'admin_list_users' }],
                     [{ text: '👥 Без доступа', callback_data: 'no_access_users' }],
+                    [{ text: '⏰ Проверить подписки', callback_data: 'admin_check_subscriptions' }],
+                    [{ text: '🧪 Тест оповещений', callback_data: 'test_notification' }],
                     [{ text: '🔍 Найти пользователя', callback_data: 'admin_find_user' }],
                     [{ text: '⚙️ Настройки', callback_data: 'admin_settings' }],
                     [{ text: '🔙 Назад', callback_data: 'back_to_main' }]
