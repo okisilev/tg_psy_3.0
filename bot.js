@@ -1196,7 +1196,7 @@ ${config.prodamus.linkToForm}
             const testUserId = 431292182;
             
             // Проверяем, есть ли подписка у пользователя
-            const user = await this.databaseService.getUserByTelegramId(testUserId);
+            const user = await this.databaseService.getUser(testUserId);
             if (!user) {
                 this.bot.sendMessage(chatId, `❌ Пользователь ${testUserId} не найден в базе данных.`);
                 return;
