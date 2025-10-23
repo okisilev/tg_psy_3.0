@@ -1229,7 +1229,14 @@ ${config.prodamus.linkToForm}
             }
 
             // Получаем все активные подписки
-            const subscriptions = await this.databaseService.getExpiringSubscriptions();
+            let subscriptions;
+            try {
+                subscriptions = await this.databaseService.getExpiringSubscriptions(30);
+            } catch (error) {
+                console.error('Error getting expiring subscriptions:', error);
+                // Fallback: получаем все активные подписки
+                subscriptions = await this.databaseService.getAllActiveSubscriptions();
+            }
             
             if (!subscriptions || subscriptions.length === 0) {
                 this.bot.sendMessage(chatId, '📊 Нет активных подписок для проверки.');
@@ -1241,6 +1248,14 @@ ${config.prodamus.linkToForm}
             
             for (const sub of subscriptions) {
                 const endDate = new Date(sub.end_date);
+                
+                // Проверяем валидность даты
+                if (isNaN(endDate.getTime())) {
+                    message += `👤 ${sub.first_name || 'Пользователь'} (@${sub.username || 'нет username'})\n`;
+                    message += `❌ Ошибка: неверная дата окончания (${sub.end_date})\n\n`;
+                    continue;
+                }
+                
                 const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
                 
                 let status = '';
@@ -1416,7 +1431,9 @@ ${config.prodamus.linkToForm}
                 );
             }
             
-            // Получаем истекшие подписки для удаления пользователей
+            // ОТКЛЮЧЕНО: Автоматическое удаление пользователей с истекшими подписками
+            // Пользователи остаются в канале даже после истечения подписки
+            /*
             const expiredSubscriptions = await this.databaseService.getExpiredSubscriptions();
             console.log(`Found ${expiredSubscriptions.length} expired subscriptions`);
             
@@ -1431,6 +1448,7 @@ ${config.prodamus.linkToForm}
             if (deactivatedCount > 0) {
                 console.log(`Deactivated ${deactivatedCount} expired subscriptions`);
             }
+            */
             
         } catch (error) {
             console.error('Error checking expiring subscriptions:', error);

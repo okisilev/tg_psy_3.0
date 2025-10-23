@@ -384,6 +384,93 @@ class DatabaseService {
     }
 
     /**
+     * Получает всех пользователей из базы данных
+     * @returns {Promise<Array>} - список всех пользователей
+     */
+    async getAllUsers() {
+        return new Promise((resolve, reject) => {
+            this.db.all(`
+                SELECT * FROM users 
+                ORDER BY created_at ASC
+            `, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    /**
+     * Создает подписку с указанными датами начала и окончания
+     * @param {number} telegramId - ID пользователя в Telegram
+     * @param {Date} startDate - дата начала подписки
+     * @param {Date} endDate - дата окончания подписки
+     * @returns {Promise<number>} - ID созданной подписки
+     */
+    async createSubscriptionWithDates(telegramId, startDate, endDate) {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare(`
+                INSERT INTO subscriptions (user_id, start_date, end_date, is_active)
+                VALUES (?, ?, ?, TRUE)
+            `);
+            
+            stmt.run([telegramId, startDate.toISOString(), endDate.toISOString()], function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(this.lastID);
+                }
+            });
+        });
+    }
+
+    /**
+     * Обновляет дату окончания подписки
+     * @param {number} subscriptionId - ID подписки
+     * @param {Date} newEndDate - новая дата окончания
+     * @returns {Promise<number>} - количество обновленных записей
+     */
+    async updateSubscriptionEndDate(subscriptionId, newEndDate) {
+        return new Promise((resolve, reject) => {
+            this.db.run(`
+                UPDATE subscriptions 
+                SET end_date = ? 
+                WHERE id = ?
+            `, [newEndDate.toISOString(), subscriptionId], function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(this.changes);
+                }
+            });
+        });
+    }
+
+    /**
+     * Получает все активные подписки
+     * @returns {Promise<Array>} - список всех активных подписок
+     */
+    async getAllActiveSubscriptions() {
+        return new Promise((resolve, reject) => {
+            this.db.all(`
+                SELECT s.*, u.first_name, u.username 
+                FROM subscriptions s
+                JOIN users u ON s.user_id = u.telegram_id
+                WHERE s.is_active = TRUE 
+                ORDER BY s.end_date ASC
+            `, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    /**
      * Получает подписки, истекающие через указанное количество дней
      * @param {number} days - количество дней до истечения
      * @returns {Promise<Array>} - список подписок
@@ -393,6 +480,11 @@ class DatabaseService {
             const targetDate = new Date();
             targetDate.setDate(targetDate.getDate() + days);
             
+            // Форматируем дату в правильном формате
+            const dateString = targetDate.getFullYear() + '-' + 
+                String(targetDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                String(targetDate.getDate()).padStart(2, '0');
+            
             this.db.all(`
                 SELECT s.*, u.first_name, u.username 
                 FROM subscriptions s
@@ -400,7 +492,7 @@ class DatabaseService {
                 WHERE s.is_active = TRUE 
                 AND DATE(s.end_date) = DATE(?)
                 ORDER BY s.end_date ASC
-            `, [targetDate.toISOString().split('T')[0]], (err, rows) => {
+            `, [dateString], (err, rows) => {
                 if (err) {
                     reject(err);
                 } else {
