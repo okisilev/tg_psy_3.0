@@ -139,8 +139,8 @@ class TelegramBotApp {
                 case 'admin_check_subscriptions':
                     await this.showSubscriptionStatus(chatId, userId);
                     break;
-                case 'test_notification':
-                    await this.testNotificationForUser(chatId, userId);
+                case 'broadcast_expired':
+                    await this.broadcastToExpiredUsers(chatId, userId);
                     break;
                 case 'admin_settings':
                     this.bot.sendMessage(chatId, '⚙️ Настройки администратора:\n\n• Добавить админа: /addadmin [ID]\n• Удалить админа: /removeadmin [ID]\n• Список админов: /listadmins');
@@ -1185,38 +1185,112 @@ ${config.prodamus.linkToForm}
         }
     }
 
-    // Тестирование оповещений для пользователя 431292182
-    async testNotificationForUser(chatId, userId) {
+    // Получить пользователей с истекшими подписками
+    async getUsersWithExpiredSubscriptions() {
+        return new Promise((resolve, reject) => {
+            this.db.all(`
+                SELECT DISTINCT u.telegram_id, u.first_name, u.username, u.last_name
+                FROM users u
+                LEFT JOIN subscriptions s ON u.telegram_id = s.user_id
+                WHERE (s.end_date < datetime('now') OR s.end_date IS NULL)
+                AND u.telegram_id IS NOT NULL
+            `, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows || []);
+                }
+            });
+        });
+    }
+
+    // Отправить сообщение пользователю с истекшей подпиской
+    async sendSubscriptionExpiredMessage(userId) {
+        try {
+            const keyboard = {
+                inline_keyboard: [
+                    [{
+                        text: '🔄 Продлить подписку',
+                        callback_data: 'renew_subscription'
+                    }],
+                    [{
+                        text: '👤 Индивидуальная консультация',
+                        url: 'https://wa.me/79025158278'
+                    }],
+                    [{
+                        text: '⭐ Отзывы',
+                        url: 'https://t.me/+7SYsD5HTemBmNDIy'
+                    }],
+                    [{
+                        text: '🔙 Назад',
+                        callback_data: 'back_to_main'
+                    }]
+                ]
+            };
+
+            await this.bot.sendMessage(userId, `
+⚠️ Ваша подписка истекла!
+
+🔗 Для продления подписки нажмите кнопку ниже или перейдите по ссылке:
+${config.prodamus.linkToForm}
+
+⏰ Не упустите возможность продолжить доступ к эксклюзивному контенту!
+
+💡 Также вы можете:
+• Получить индивидуальную консультацию
+• Посмотреть отзывы других участников
+            `, {
+                reply_markup: keyboard
+            });
+
+            console.log(`✅ Expired subscription message sent to user ${userId}`);
+        } catch (error) {
+            console.error(`❌ Failed to send expired message to user ${userId}:`, error.message);
+        }
+    }
+
+    // Рассылка пользователям с истекшими подписками
+    async broadcastToExpiredUsers(chatId, userId) {
         try {
             if (!this.isAdmin(userId)) {
                 this.bot.sendMessage(chatId, '❌ У вас нет прав администратора.');
                 return;
             }
 
-            const testUserId = 431292182;
+            // Получаем пользователей с истекшими подписками
+            const expiredUsers = await this.getUsersWithExpiredSubscriptions();
             
-            // Проверяем, есть ли подписка у пользователя
-            const user = await this.databaseService.getUser(testUserId);
-            if (!user) {
-                this.bot.sendMessage(chatId, `❌ Пользователь ${testUserId} не найден в базе данных.`);
+            if (!expiredUsers || expiredUsers.length === 0) {
+                this.bot.sendMessage(chatId, '📊 Нет пользователей с истекшими подписками для рассылки.');
                 return;
             }
 
-            // Получаем активную подписку пользователя
-            const subscription = await this.databaseService.getActiveSubscription(testUserId);
-            if (!subscription) {
-                this.bot.sendMessage(chatId, `❌ У пользователя ${testUserId} нет активной подписки.`);
-                return;
+            this.bot.sendMessage(chatId, `📢 Начинаем рассылку для ${expiredUsers.length} пользователей с истекшими подписками...`);
+
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const user of expiredUsers) {
+                try {
+                    // Отправляем сообщение о продлении подписки
+                    await this.sendSubscriptionExpiredMessage(user.telegram_id);
+                    successCount++;
+                    
+                    // Небольшая задержка между сообщениями
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                } catch (error) {
+                    console.error(`❌ Ошибка отправки пользователю ${user.telegram_id}:`, error);
+                    errorCount++;
+                }
             }
 
-            // Отправляем тестовое уведомление
-            await this.sendSubscriptionExpiryNotification(testUserId, subscription);
-            
-            this.bot.sendMessage(chatId, `✅ Тестовое уведомление отправлено пользователю ${testUserId}.\n\n📅 Дата окончания подписки: ${new Date(subscription.end_date).toLocaleDateString('ru-RU')}`);
+            // Отправляем отчет администратору
+            this.bot.sendMessage(chatId, `📊 Рассылка завершена!\n\n✅ Успешно отправлено: ${successCount}\n❌ Ошибок: ${errorCount}\n📝 Всего пользователей: ${expiredUsers.length}`);
 
         } catch (error) {
-            console.error('Error testing notification:', error);
-            this.bot.sendMessage(chatId, '❌ Ошибка при отправке тестового уведомления.');
+            console.error('Error in broadcast:', error);
+            this.bot.sendMessage(chatId, '❌ Ошибка при выполнении рассылки.');
         }
     }
 
@@ -1302,7 +1376,7 @@ ${config.prodamus.linkToForm}
                     [{ text: '👥 Список пользователей', callback_data: 'admin_list_users' }],
                     [{ text: '👥 Без доступа', callback_data: 'no_access_users' }],
                     [{ text: '⏰ Проверить подписки', callback_data: 'admin_check_subscriptions' }],
-                    [{ text: '🧪 Тест оповещений', callback_data: 'test_notification' }],
+                    [{ text: '📢 Рассылка', callback_data: 'broadcast_expired' }],
                     [{ text: '🔍 Найти пользователя', callback_data: 'admin_find_user' }],
                     [{ text: '⚙️ Настройки', callback_data: 'admin_settings' }],
                     [{ text: '🔙 Назад', callback_data: 'back_to_main' }]
@@ -1431,24 +1505,15 @@ ${config.prodamus.linkToForm}
                 );
             }
             
-            // ОТКЛЮЧЕНО: Автоматическое удаление пользователей с истекшими подписками
-            // Пользователи остаются в канале даже после истечения подписки
-            /*
+            // ВКЛЮЧЕНО: Автоматическая деактивация истекших подписок
             const expiredSubscriptions = await this.databaseService.getExpiredSubscriptions();
             console.log(`Found ${expiredSubscriptions.length} expired subscriptions`);
             
-            // Удаляем пользователей с истекшими подписками из канала
-            for (const subscription of expiredSubscriptions) {
-                console.log(`Processing expired subscription for user ${subscription.telegram_id}`);
-                await this.kickUserFromChannel(subscription.telegram_id);
-            }
-            
-            // Деактивируем истекшие подписки
+            // Деактивируем истекшие подписки (меняем is_active на FALSE)
             const deactivatedCount = await this.databaseService.deactivateExpiredSubscriptions();
             if (deactivatedCount > 0) {
-                console.log(`Deactivated ${deactivatedCount} expired subscriptions`);
+                console.log(`✅ Deactivated ${deactivatedCount} expired subscriptions`);
             }
-            */
             
         } catch (error) {
             console.error('Error checking expiring subscriptions:', error);
@@ -1456,20 +1521,65 @@ ${config.prodamus.linkToForm}
     }
 
     /**
+     * Проверяет подписки и выполняет мягкую блокировку пользователей без подписки
+     */
+    async checkSubscriptionsAndSoftBan() {
+        try {
+            console.log('🔍 Проверка подписок и мягкая блокировка...');
+            
+            // Получаем всех пользователей
+            const users = await this.databaseService.getAllUsers();
+            
+            for (const user of users) {
+                try {
+                    // Проверяем, есть ли активная подписка
+                    const hasActiveSubscription = await this.databaseService.hasActiveSubscription(user.telegram_id);
+                    
+                    if (!hasActiveSubscription) {
+                        // Пользователь не имеет активной подписки - выполняем мягкую блокировку
+                        await this.databaseService.softDeleteUser(user.telegram_id);
+                        console.log(`🔒 Пользователь ${user.telegram_id} (${user.first_name}) заблокирован (мягкое удаление)`);
+                    } else {
+                        // Пользователь имеет активную подписку - снимаем блокировку если была
+                        const isBanned = await this.databaseService.isUserBanned(user.telegram_id);
+                        if (isBanned) {
+                            await this.databaseService.restoreUser(user.telegram_id);
+                            console.log(`🔓 Пользователь ${user.telegram_id} (${user.first_name}) разблокирован`);
+                        }
+                    }
+                } catch (error) {
+                    console.error(`❌ Ошибка проверки пользователя ${user.telegram_id}:`, error);
+                }
+            }
+            
+            console.log('✅ Проверка подписок и мягкая блокировка завершена');
+            
+        } catch (error) {
+            console.error('❌ Ошибка при проверке подписок:', error);
+        }
+    }
+
+    /**
      * Запускает периодическую проверку подписок
      */
     startSubscriptionChecker() {
-        // Проверяем каждые 6 часов
+        // Проверяем каждые 6 часов (уведомления об истечении)
         setInterval(async () => {
             await this.checkExpiringSubscriptions();
         }, 6 * 60 * 60 * 1000);
         
+        // Проверяем подписки и выполняем мягкую блокировку каждый час
+        setInterval(async () => {
+            await this.checkSubscriptionsAndSoftBan();
+        }, 60 * 60 * 1000);
+        
         // Первая проверка через 1 минуту после запуска
         setTimeout(async () => {
             await this.checkExpiringSubscriptions();
+            await this.checkSubscriptionsAndSoftBan();
         }, 60 * 1000);
         
-        console.log('✅ Subscription checker started');
+        console.log('✅ Subscription checker started (hourly soft ban check)');
     }
 }
 
