@@ -115,6 +115,9 @@ class TelegramBotApp {
                 case 'help':
                     this.handleHelpRequest(chatId);
                     break;
+                case 'club_info':
+                    this.handleClubInfoRequest(chatId);
+                    break;
                 case 'back_to_main':
                     this.showMainMenu(chatId, userId);
                     break;
@@ -336,6 +339,7 @@ class TelegramBotApp {
                 inline_keyboard: [
                     [{ text: '👑 Панель администратора', callback_data: 'admin_panel' }],
                     [{ text: '🎯 Вступить в клуб', callback_data: 'pay' }],
+                    [{ text: '📋 Что внутри клуба', callback_data: 'club_info' }],
                     [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
                     [{ text: '⭐ Отзывы', url: 'https://t.me/+7SYsD5HTemBmNDIy' }],
                     [{ text: '❓ Помощь', callback_data: 'help' }]
@@ -358,6 +362,27 @@ class TelegramBotApp {
 В котором нет никаких ограничений и рамок 👌
 В котором есть все в изобилии 😎
 
+Стоимость подписки всего - 2500₽/мес
+
+Чтобы получить доступ в канал, нажимай на кнопку «Вступить в клуб»
+
+            `;
+
+            const keyboard = {
+                    inline_keyboard: [
+                    [{ text: '🎯 Вступить в клуб', callback_data: 'pay' }],
+                    [{ text: '📋 Что внутри клуба', callback_data: 'club_info' }],
+                    [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
+                    [{ text: '⭐ Отзывы', url: 'https://t.me/+7SYsD5HTemBmNDIy' }],
+                    [{ text: '❓ Помощь', callback_data: 'help' }]
+                ]
+            };
+
+            this.bot.sendMessage(chatId, welcomeMessage, { reply_markup: keyboard, parse_mode: 'HTML' });
+    }
+
+    async handleClubInfoRequest(chatId) {
+        const clubInfoMessage = `
 <strong>Что внутри клуба?</strong>
 
 <strong>1️⃣ Онлайн лекции</strong> 
@@ -377,24 +402,17 @@ class TelegramBotApp {
 <strong>4️⃣ Чат общения с участницами и мной.</strong> 
 Женщине нужна женщина. Именно поэтому я создала это поддерживающее комьюнити. Где безопасно можно открыться и получить поддержку.
 
- 5️⃣ В клубе ты можешь задать мне любой вопрос в любое время. Я даю развернутые ответы и разбираю любой твой запрос 👌
+<strong>5️⃣ В клубе ты можешь задать мне любой вопрос в любое время. Я даю развернутые ответы и разбираю любой твой запрос 👌</strong>
+        `;
 
-Стоимость подписки всего - 2500₽/мес
+        const keyboard = {
+            inline_keyboard: [
+                [{ text: '🎯 Вступить в клуб', callback_data: 'pay' }],
+                [{ text: '🔙 Назад', callback_data: 'back_to_main' }]
+            ]
+        };
 
-Чтобы получить доступ в канал, нажимай на кнопку «Вступить в клуб»
-
-            `;
-
-            const keyboard = {
-                    inline_keyboard: [
-                    [{ text: '🎯 Вступить в клуб', callback_data: 'pay' }],
-                    [{ text: '👤 Индивидуальная консультация', url: 'https://wa.me/79025158278' }],
-                    [{ text: '⭐ Отзывы', url: 'https://t.me/+7SYsD5HTemBmNDIy' }],
-                    [{ text: '❓ Помощь', callback_data: 'help' }]
-                ]
-            };
-
-            this.bot.sendMessage(chatId, welcomeMessage, { reply_markup: keyboard, parse_mode: 'HTML' });
+        this.bot.sendMessage(chatId, clubInfoMessage, { reply_markup: keyboard, parse_mode: 'HTML' });
     }
 
     async handleHelpRequest(chatId) {
