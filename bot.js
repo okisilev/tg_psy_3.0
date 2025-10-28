@@ -295,9 +295,9 @@ class TelegramBotApp {
             const paymentLink = prodamusService.createExpandedPaymentLink(paymentData);
 
             const message = `
-💳 Перейдите по ссылке для оплаты:
+💳 Оплата доступа
 
-${paymentLink}
+Нажмите кнопку ниже «Перейти к оплате».
 
 После успешной оплаты вы автоматически получите доступ к сообществу.
 
@@ -313,7 +313,7 @@ ${paymentLink}
                 ]
             };
 
-            this.bot.sendMessage(chatId, message, { reply_markup: keyboard });
+            this.bot.sendMessage(chatId, message, { reply_markup: keyboard, disable_web_page_preview: true });
 
         } catch (error) {
             console.error('Error creating payment link:', error);
@@ -675,7 +675,7 @@ ${inviteLink}
     isAdmin(userId) {
         // ID администраторов (владельцы группы/канала)
         const adminIds = [
-            431292182,  // Основной администратор
+            //431292182,  // Основной администратор
             190545165,  // Владелец группы
             // Добавьте сюда ID других администраторов
         ];
